@@ -33,7 +33,7 @@ bool equal(double x, double y) {
 }
 
 /*
-* poly - Represents a polynomial
+* poly - Represents a polynomial.
 */
 struct poly {
     // c - Represents the coefficients of the polynomial. The size of this vector is one more than the degree of the polynomial.
@@ -901,5 +901,142 @@ struct expr {
                 final.l[i].val0 = final.l[i].val0.slice(s, e);
         }
         return final;
+    }
+};
+
+
+/*
+* comp - Represents a composite expression such that given expr objects x and y, x(y) is returned.
+*/
+expr comp(expr x, expr y) {
+    expr final = y.copy();
+    int initInd = int(final.len()) - 1; // Represents the index of the evaluated value of the y expr object.
+    std::vector<std::vector<int>> sMat;
+    std::vector<int> sVec;
+    // Whenever a POLYNOMIAL types coeffecients get evaluated in a comp function, they need to get added in one by one as constants so that they can be multiplied.
+    // Because of this, a new vector is needed to store the new indicies that represent the old values.
+    std::vector<int> newIndexes;
+    for (unsigned int i = 0; i < x.len(); i++) {
+        switch (x.l[i].type) {
+        case POLYNOMIAL:
+            sMat.clear();
+            for (unsigned int j = 0; j < x.l[i].val0.c.size(); j++) {
+                sMat.push_back(std::vector<int>());
+                final.push(expNode(x.l[i].val0.c[j]));
+                sMat[sMat.size() - 1].push_back(int(final.len()) - 1);
+                for (unsigned int k = 0; k < x.l[i].val0.c.size() - j - 1; k++)
+                    sMat[sMat.size() - 1].push_back(initInd);
+            }
+            final.push(expNode(sMat, x.l[i].f, x.l[i].n));
+            break;
+        case COMPOUND:
+            sMat.clear();
+            for (unsigned int j = 0; j < x.l[i].val1.size(); j++) {
+                sMat.push_back(std::vector<int>());
+                for (unsigned int k = 0; k < x.l[i].val1[j].size(); k++) {
+                    sMat[sMat.size() - 1].push_back(newIndexes[x.l[i].val1[j][k]]);
+                }
+            }
+            final.push(expNode(sMat, x.l[i].f, x.l[i].n));
+            break;
+        case FRACTION:
+            sVec.clear();
+            for (unsigned int j = 0; j < 2; j++)
+                sVec.push_back(newIndexes[x.l[i].val2[j]]);
+            final.push(expNode(sVec, x.l[i].f, x.l[i].n));
+            break;
+        case CONSTANT:
+            final.push(expNode(x.l[i].val3));
+            break;
+        }
+        newIndexes.push_back(int(final.len()) - 1);
+    }
+    final.optimize();
+    return final;
+}
+
+/*
+* point - Represents an ordered pair with an x and y value.
+*/
+struct point {
+    double x{};
+    double y{};
+    point() {}
+    point(double xp, double yp) : x(xp), y(yp) {}
+
+    // print - Prints x and y.
+    void print() {
+        std::cout << x << ", " << y;
+    }
+
+    // Operator overload == - Compares the x and y values using the modified equivalence check and returns true if both are equal.
+    bool operator==(point n){
+        return equal(x, n.x) && equal(y, n.y);
+    }
+
+    // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians by default, but will return in degrees if deg is set to true.
+    double deriveAngle(bool deg) {
+        double final = 0;
+        if (equal(x, 0)) {
+            if (y > 0)
+                final = pi/2;
+            if (y < 0)
+                final = 3*pi/2;
+        }
+        else{
+            final = atan(y / x);
+            if (x < 0)
+                final += pi;
+            if (x > 0 && y < 0)
+                final += 2*pi;
+        }
+        if(deg)
+            final = final * 180 / pi;
+        return final;
+    }
+};
+
+/*
+* dist - Calculates the distance between two points.
+*/
+double dist(point p1, point p2) {
+    return sqrt(pow(p2.x - p1.x, 2) + pow(p2.y - p1.y, 2));
+};
+
+/*
+* dist - Represents a point slope function in either the form y = mx + b or x = my + b.
+*/
+struct ps {
+    bool yFunc{};
+    double m{};
+    double b{};
+    ps() {}
+    ps(point p1, point p2) {
+        // To prevent slope divisions by 0, yFunc is set to true only if the difference in the x values of the reference points is greater than the y.
+        // By doing this, the slope of any ps object will be less than 1.
+        double difX = p2.x - p1.x;
+        double difY = p2.y - p1.y;
+        yFunc = (abs(difX) > abs(difY));
+        if (yFunc) {
+            m = difY / difX;
+            b = -m * p1.x + p1.y;
+        }
+        else {
+            m = difX / difY;
+            b = -m * p1.y + p1.x;
+        }
+    }
+
+    // Operator overload () - Finds the point that would lie on the line created by the ps object parameters.
+    point operator()(double x) {
+        if (yFunc)
+            return point(x, m * x + b);
+        else
+            return point(m * x + b, x);
+    }
+
+    // print - Prints the slope, intercept, and if the function is of y or x.
+    void print() {
+        std::cout << m << " " << b << " " << yFunc;
     }
 };
