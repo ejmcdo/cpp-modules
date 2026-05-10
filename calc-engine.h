@@ -1,3 +1,6 @@
+/*
+* Module that houses all the nerdy math functions and objects.
+*/
 #pragma once
 #include <iostream>
 #include <vector>
