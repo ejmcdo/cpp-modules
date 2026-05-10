@@ -137,24 +137,28 @@ struct poly {
             final.c[i] *= pow(e - s, deg()+1 - 1 - i); // Each coefficient is multiplied by the difference between the new end and new start raised to its respective power.
         return final;
     }
-};
 
-// pow - Raises a poly object x to the nth power and returns the result.
-poly pow(poly x, int n){
-    poly final=x;
-    for(int i=1;i<n;i++)
-        final *= x;
-    return final;
-}
+    //Operator overload ^ - Raises the current poly object to the nth power and returns the result.
+    poly operator^(int n){
+        poly final=(*this);
+        for(int i=1;i<n;i++)
+            final *= (*this);
+        return final;
+    }
 
-/*
-* dPoly - Returns the derivative the polynomial x.
-*/
-poly dPoly(poly x) {
-    std::vector<double> final;
-    for (int i = 0; i < int(x.c.size()) - 1; i++) // Derivative of a polynomial has a degree thats 1 less than its original.
-        final.push_back(x.c[i] * (x.c.size() - 1 - i)); // The value multiplied by the power is applied to the vector.
-    return poly(final);
+    //Operator overload ^= - Finds the current poly object to the nth power and sets the current poly object equal to it.
+    void operator^=(int n){
+        for(int i=1;i<n;i++)
+            (*this) *= (*this);
+    }
+
+    //derive - Returns the derivative of the current poly object.
+    poly derive(){
+        std::vector<double> final;
+        for (int i = 0; i < deg(); i++) // Derivative of a polynomial has a degree thats 1 less than its original.
+            final.push_back(c[i] * (deg() - i)); // The value multiplied by the power is applied to the vector.
+        return poly(final);
+    }
 };
 
 /*
@@ -173,7 +177,7 @@ enum expNodeType {
 /*
 * fullNodeFuncNames - Names of each type of expression Node as strings.
 */
-std::vector<std::string> expNodeNames = std::vector<std::string>({ "polynomial","compound","fraction","constant" });
+std::vector<std::string> expNodeNames = std::vector<std::string>({ "Polynomial","Compound","Fraction","Constant" });
 
 /*
 * fullNodeFuncType - Different types of expression node functions.
@@ -192,7 +196,7 @@ enum expNodeFuncType {
 /*
 * fullNodeFuncNames - Names of each expression node function as strings.
 */
-std::vector<std::string> expNodeFuncNames = std::vector<std::string>({ "none","square root","sine","cosine" });
+std::vector<std::string> expNodeFuncNames = std::vector<std::string>({ "None","Square root","Sine","Cosine" });
 
 /*
 * expNode - Represents a node in an exp object.
@@ -324,7 +328,7 @@ struct expNode {
             break;
         }
         if (type != CONSTANT)
-            std::cout << " [" << expNodeFuncNames[int(f)] << ", " << (n ? "negated" : "!negated") << "]"; // For all types except CONSTANT, function type and negation are printed.
+            std::cout << " [" << expNodeFuncNames[int(f)] << ", " << (n ? "Negated" : "Not negated") << "]"; // For all types except CONSTANT, function type and negation are printed.
     }
     bool operator==(expNode x){
         bool final;
@@ -612,6 +616,20 @@ struct expr {
     // Operator overload /= - Finds the quotient of the current expr object and expr object n and sets the current expr object equal to it.
     void operator/=(expr n){*this = (*this/n);}
 
+    //Operator overload ^ - Raises the current expr object to the nth power and returns the result.
+    expr operator^(int n){
+        expr final=(*this);
+        for(int i=1;i<n;i++)
+            final *= (*this);
+        return final;
+    }
+
+    //Operator overload ^= - Finds the current expr object to the nth power and sets the current expr object equal to it.
+    void operator^=(int n){
+        for(int i=1;i<n;i++)
+            (*this) *= (*this);
+    }
+
     // optimize - Removes any unecessary nodes from the vector(copied values, zero/one constants, etc.)
     void optimize() {
         if (!l.size()) // Function ends if there are either 1) no values in the node list, or 2) the last value is either of type POLYNOMIAL or CONSTANT.
@@ -836,7 +854,7 @@ struct expr {
         for (unsigned int i = 0; i < len(); i++) {
             switch (final.l[i].type) {
             case POLYNOMIAL: // For POLYNOMIAL types, the derivative of the polynomial is calculated and stored.
-                final.push(expNode(dPoly(final.l[i].val0), NONE_FUNC, false));
+                final.push(expNode(final.l[i].val0.derive(), NONE_FUNC, false));
                 break;
             case COMPOUND:
                 // For COMPOUND types, the chain rule is used to find the derivative. Both normal terms and derivative terms are used alike.
@@ -955,6 +973,9 @@ expr comp(expr x, expr y) {
     return final;
 }
 
+// angleDeg - If set to true, the deriveAngle function of the point object will return value in degrees. Radians if otherwise.
+bool angleDeg = false;
+
 /*
 * point - Represents an ordered pair with an x and y value.
 */
@@ -974,8 +995,8 @@ struct point {
         return equal(x, n.x) && equal(y, n.y);
     }
 
-    // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians by default, but will return in degrees if deg is set to true.
-    double deriveAngle(bool deg) {
+    // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians by default, but will return in degrees if angleDeg is set to true.
+    double deriveAngle() {
         double final = 0;
         if (equal(x, 0)) {
             if (y > 0)
@@ -990,7 +1011,7 @@ struct point {
             if (x > 0 && y < 0)
                 final += 2*pi;
         }
-        if(deg)
+        if(angleDeg)
             final = final * 180 / pi;
         return final;
     }
@@ -1004,7 +1025,7 @@ double dist(point p1, point p2) {
 };
 
 /*
-* dist - Represents a point slope function in either the form y = mx + b or x = my + b.
+* ps - Represents a point slope function in either the form y = mx + b or x = my + b.
 */
 struct ps {
     bool yFunc{};
@@ -1039,4 +1060,104 @@ struct ps {
     void print() {
         std::cout << m << " " << b << " " << yFunc;
     }
+};
+
+/*
+* para - Represents a parametric curve with an x and y component.
+*/
+struct para {
+    expr x{};
+    expr y{};
+    para() {}
+    para(expr xe, expr ye) : x(xe), y(ye) {}
+
+    // Operator overload () - Finds the point that would lie on the curve at value n.
+    point operator()(double n) {
+        return point(x(n), y(n));
+    }
+
+    // derive - Derives each component of the curve and returns the result as a new para object.
+    para derive(){
+        return para(x.derive(),y.derive());
+    }
+
+    // anglePoint - Returns the angle of the direction vector of the parametric curve at point n
+    double anglePoint(double n) {
+        return derive()(n).deriveAngle();
+    }
+
+    // print - Prints x and y.
+    void print() {
+        std::cout << "x:\n";
+        x.print();
+        std::cout << "\ny:\n";
+        y.print();
+    }
+
+    // printPoint - Prints the value of the parametric curve at point x.
+    void printPoint(double x) {
+        (*this)(x).print();
+    }
+
+    // ends - Prints the values of the parametric curve at 0 and 1.
+    void ends() {
+        printPoint(0);
+        std::cout << std::endl;
+        printPoint(1);
+    }
+
+    // optimize - Optimizes each component.
+    void optimize() {
+        x.optimize();
+        y.optimize();
+    }
+
+    // tanLine - Finds the tangent line at point t by finding the value of the derivative onto the original and storing the result in a ps object.
+    ps tanLine(double t) {
+        para d = derive();
+        point tp = (*this)(t);
+        return ps(tp, point(d.x(t) + tp.x, d.y(t) + tp.y));
+    };
+
+    // angleDeriv - Finds the derivative of the function of the direction angle(arctangent of quotient of the derivatives of the y and x components) and stores it as a single expression
+    expr angleDeriv() {
+        para dc = derive();
+        para ddc = dc.derive();
+        return (ddc.y*dc.x-ddc.x*dc.y)/((dc.x^2)+(dc.y^2));
+    }
+    // slice - Slices the x and y compnents of the current para and returns the result.
+    para slice(double s, double e) {
+        return para(x.slice(s, e), y.slice(s, e));
+    }
+
+    // copy - Returns a copy of the current para.
+    para copy(){
+        return para(x.copy(),y.copy());
+    }
+};
+
+/*
+* angleVector - Returns the angle vector created from points p1 and p2.
+*/
+double angleVector(point p1, point p2) {
+    return point(p2.x - p1.x, p2.y - p1.y).deriveAngle();
+};
+
+/*
+* bez - Creates a bezier curve using control points co.
+*/
+para bez(std::vector<point> co) {
+    std::vector<double> xPos;
+    std::vector<double> yPos;
+    for (unsigned int i = 0; i < co.size(); i++) {
+        double sX = 0;
+        double sY = 0;
+        for (unsigned int j = 0; j < co.size() - i; j++) {
+            sX += co[j].x * pascal(int(co.size()) - i - 1, j) * pow(-1, j + 1 + i);
+            sY += co[j].y * pascal(int(co.size()) - i - 1, j) * pow(-1, j + 1 + i);
+        }
+        xPos.push_back(pascal(int(co.size()) - 1, i) * sX * pow(-1, int(co.size())));
+        yPos.push_back(pascal(int(co.size()) - 1, i) * sY * pow(-1, int(co.size())));
+    }
+    return para(std::vector<expNode>({expNode(xPos, NONE_FUNC, false)}), std::vector<expNode>({expNode(yPos, NONE_FUNC, false)}));
 };
