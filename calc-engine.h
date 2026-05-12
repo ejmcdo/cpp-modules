@@ -104,6 +104,9 @@ struct poly {
     // Operator overload == - Checks if current poly object is equal to poly object n.
     bool operator==(poly n){return c == n.c;}
 
+    // Operator overload != - Checks if current poly object is not equal to poly object n.
+    bool operator!=(poly n){return !(c == n.c);}
+
     // deg - Returns the degree of polynomial(the length of the vector c - 1).
     int deg(){
         return c.size()-1;
@@ -333,6 +336,8 @@ struct expNode {
         if (type != CONSTANT)
             std::cout << " [" << expNodeFuncNames[int(f)] << ", " << (n ? "Negated" : "Not negated") << "]"; // For all types except CONSTANT, function type and negation are printed.
     }
+
+    // Operator overload == - Checks if expNode x is equal to the current expNode.
     bool operator==(expNode x){
         bool final;
         if (type == x.type && f == x.f && n == x.n) {
@@ -353,6 +358,9 @@ struct expNode {
         }
         return final;
     }
+
+    // Operator overload != - Checks if expNode x is not equal to the current expNode.
+    bool operator !=(expNode x){return !((*this) == x);}
 };
 
 /*
@@ -489,7 +497,7 @@ struct expr {
     void push(expNode x) { // For COMPOUND and FRACTION types, the values they refer to are list indicies. Because of this, a special feature is used when the index in the passed node is less than 0, such that values at the end of the list can be more easily reached.
                            // If an expNode has an index of -1, the length of the original node list is added on to the index, such that the last value in the node list(at the time) is refered to.
                            // The same logic applies for values of -2 and -3, such that the second-to-last and third-to-last values are referred to, and so on and so forth.
-                           // Example: If an expNode has an index value of -1 and is pushed to an exp object whose node list is of length 10, then that index of the expNode becomes -1+10, or 9, referring to the then last value of the expNode in the list
+                           // Example: If an expNode has an index value of -1 and is pushed to an exp object whose node list is of length 10, then that index of the expNode becomes -1+10, or 9, referring to the then last value of the expNode in the list.
         if (x.type == COMPOUND) {
             for (unsigned int i = 0; i < x.val1.size(); i++) {
                 for (unsigned int j = 0; j < x.val1[i].size(); j++) {
@@ -998,6 +1006,11 @@ struct point {
         return equal(x, n.x) && equal(y, n.y);
     }
 
+    // Operator overload != - Compares the x and y values using the modified equivalence check and returns false if both are equal.
+    bool operator!=(point n){
+        return !((*this) == n);
+    }
+
     // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians by default, but will return in degrees if angleDeg is set to true.
     double deriveAngle() {
         double final = 0;
@@ -1066,11 +1079,81 @@ struct ps {
 };
 
 /*
+* bounds - Represents a rectangular area with minimums and maximums.
+*/
+struct bounds {
+    double minX{};
+    double minY{};
+    double maxX{};
+    double maxY{};
+    bounds() {}
+    bounds(double ix, double iy, double ax, double ay) : minX(ix), minY(iy), maxX(ax), maxY(ay) {}
+
+    // within - Checks if point p lies is greater than the minimums and less than the maximums.
+    bool within(point p) {
+        return (p.x > minX && p.x < maxX && p.y > minY && p.y < maxY);
+    }
+
+    // print - Prints the minimums and the maximums.
+    void print() {
+        std::cout << minX << " " << minY << " " << maxX << " " << maxY;
+    }
+
+    // diagonal - Returns the distance between the minimum point and the maximum point.
+    double diagonal() {
+        return sqrt(pow(maxX - minX, 2) + pow(maxY - minY, 2));
+    }
+};
+
+/*
+* linePixel - Represents a pixel in a line of a parametric curve.
+*/
+struct linePixel {
+    int x{};
+    int y{};
+
+    // mag - Refers to how close the line is to the curve and how strongly the curves properties would be rendered in an image. Contained within the range 0 - 1.
+    // Example: A linePixel with mag 0.5 that's part of a black(#000000) line on a white(#ffffff) background would render as gray(#808080, the color directly between black and white rounded to the nearest integer).
+    double mag{};
+    linePixel() {}
+    linePixel(int xp, int yp, double m) : x(xp), y(yp), mag(m) {}
+
+    // print - Prints the x, y, and mag values.
+    void print() {
+        std::cout << x << ", " << y << ", " << mag << "\n";
+    }
+};
+
+/*
 * para - Represents a parametric curve with an x and y component.
 */
 struct para {
     expr x{};
     expr y{};
+
+    // configured - Set to true to avoid unnecessary reconfiguration of cached values.
+    bool configured{};
+
+    // positions, main/deriv/doubleDeriv points - Cached values to avoid constant recalculation. Configured once per curve.
+    std::vector<double> positions;
+    std::vector<point> mainPoints;
+    std::vector<point> derivPoints;
+    std::vector<point> doubleDerivPoints;
+
+    // limits - the minimums and maximums of the curve.
+    bounds limits;
+
+    // length - Approximate length of the curve.
+    double length;
+
+    // start/end An - Initial and terminal angles of the direction vector of the curve(in radians).
+    double startAn;
+    double endAn;
+
+    // linePixels - Pixel positions and magnitudes to be rendered for the curve in an image.
+    std::vector<linePixel> linePixels;
+
+
     para() {}
     para(expr xe, expr ye) : x(xe), y(ye) {}
 
@@ -1095,6 +1178,14 @@ struct para {
         x.print();
         std::cout << "\ny:\n";
         y.print();
+        std::cout << "\n" << (configured ? "Configured" : "Not configured");
+        if(configured){
+            std::cout << "\nPoint cache length: " << mainPoints.size() << "\nLimits: ";
+            limits.print();
+            std::cout << "\nLength: " << length << "\nStart angle: " << startAn << "\nEnd angle: " << endAn;
+            if(linePixels.size())
+                std::cout << "\nLine pixel count: " << linePixels.size();
+        }
     }
 
     // printPoint - Prints the value of the parametric curve at point x.
@@ -1136,6 +1227,273 @@ struct para {
     // copy - Returns a copy of the current para.
     para copy(){
         return para(x.copy(),y.copy());
+    }
+
+    // configure - Configures all cached data for the curve.
+    void configure() {
+        if (!configured) {
+            configured = true;
+            // derivative and double derivative curves are initialized.
+            para dc = derive();
+            para ddc = dc.derive();
+            double p = 0;
+            point fp = (*this)(p);
+            point dp = dc(p);
+            point ddp = ddc(p);
+
+            // A rough estimate of the curve limits is made before traversal.
+            limits.minX = fp.x;
+            limits.maxX = fp.x;
+            limits.minY = fp.y;
+            limits.maxY = fp.y;
+            point limPoint;
+            for (double i = 0; i <= 1; i += 0.1) {
+                limPoint = (*this)(i);
+                limits.minX = std::min(limPoint.x, limits.minX);
+                limits.maxX = std::max(limPoint.x, limits.maxX);
+                limits.minY = std::min(limPoint.y, limits.minY);
+                limits.maxY = std::max(limPoint.y, limits.maxY);
+            }
+
+            // All cached value fall between the range 0 - 1, inclusive.
+            while (p < 1) {
+                if (mainPoints.size() > 0) { // Ensures that the current isn't equal to(or negligibly close to) the previous point. Curve limits are also updated progressively.
+                    if (fp != mainPoints[mainPoints.size() - 1]) {
+                        positions.push_back(p);
+                        mainPoints.push_back(fp);
+                        derivPoints.push_back(dp);
+                        doubleDerivPoints.push_back(ddp);
+                        limits.minX = std::min(fp.x, limits.minX);
+                        limits.maxX = std::max(fp.x, limits.maxX);
+                        limits.minY = std::min(fp.y, limits.minY);
+                        limits.maxY = std::max(fp.y, limits.maxY);
+                    }
+                }
+                else {
+                    positions.push_back(p);
+                    mainPoints.push_back(fp);
+                    derivPoints.push_back(dp);
+                    doubleDerivPoints.push_back(ddp);
+                }
+
+                // Approximation of the curve length. If I could properly integrate using this module, I would.
+                if (mainPoints.size() > 1)
+                    length += dist(mainPoints[mainPoints.size() - 2], mainPoints[mainPoints.size() - 1]);
+                // Traversal is made primarily using the reciprocal of the magnitude of the direction vector. In cases where such magnitude approaches 0, the reciprocal of the diagonal of the curve limits is used instead.
+                p += 1 / std::max(dist(dp, point(0, 0)), limits.diagonal());
+                fp = (*this)(p);
+                dp = dc(p);
+                ddp = ddc(p);
+            }
+            positions.push_back(1);
+            mainPoints.push_back((*this)(1));
+            derivPoints.push_back(dc(1));
+            doubleDerivPoints.push_back(ddc(1));
+            length += dist(mainPoints[mainPoints.size() - 2], mainPoints[mainPoints.size() - 1]);
+
+            // In cases where magnitude of the curve approaches 0 at either 0 or 1, an estimation algorithm is used to determine what the angle the curve approaches to.
+            // Since the divisions between microscopic values can be unpredictable, traversal by 0.000001 is repeated until a value that isn't negligibly small is found to divide.
+            double subS = 0.000001;
+            double subE = 0.999999;
+            point tpS = dc(subS);
+            point tpE = dc(subE);
+            if (derivPoints[0] == point(0, 0)) {
+                while (tpS == point(0, 0)) {
+                    subS += 0.000001;
+                    tpS = dc(subS);
+                }
+                startAn = tpS.deriveAngle();
+            }
+            else
+                startAn = derivPoints[0].deriveAngle();
+            if (derivPoints[derivPoints.size() - 1] == point(0, 0)) {
+                while (tpE == point(0, 0)) {
+                    subE -= 0.000001;
+                    tpE = dc(subE);
+                }
+                endAn = tpE.deriveAngle();
+            }
+            else
+                endAn = derivPoints[derivPoints.size() - 1].deriveAngle();
+        }
+    }
+
+    // findClosest - Finds the position on the line between 0 and 1 that's closest to point p. Returns the position and the distance.
+    std::vector<double> findClosest(point p) {
+        if (!configured) // Cached main points are used as a basis for estimation.
+            configure();
+        double final = 0;
+        double lowestValue = dist(p, mainPoints[0]);
+        int lowestIndex = 0;
+        double sampleDist = 0;
+        for (unsigned int i = 0; i < mainPoints.size(); i++) {
+            sampleDist = dist(p, mainPoints[i]);
+            if (sampleDist < lowestValue) {
+                lowestValue = sampleDist;
+                lowestIndex = i;
+            }
+        }
+        final = positions[lowestIndex];
+        double startPoint; // Refers to the power of 10 the estimation process should start at. Varies directly with the magnitude of the curve at the intially estimated closest point.
+        if (pow(derivPoints[lowestIndex].x, 2) + pow(derivPoints[lowestIndex].y, 2) > 0)
+            startPoint = log10(pow(derivPoints[lowestIndex].x, 2) + pow(derivPoints[lowestIndex].y, 2)) + 1;
+        else
+            startPoint = 3;
+        for (int k = 0; k < 10; k++) { // An additional 10 decimal digits of accuracy are given to the estimation.
+            for (int i = -10; i < 11; i++) {
+                sampleDist = dist(p, (*this)(final + i / pow(10, k + startPoint)));
+                if (i == -10) {
+                    lowestIndex = -10;
+                    lowestValue = sampleDist;
+                }
+                if (sampleDist <= lowestValue) {
+                    lowestIndex = i;
+                    lowestValue = sampleDist;
+                }
+            }
+            final += lowestIndex / pow(10, k + startPoint); // If the value exceeds the bounds of 0 - 1, the estimation is stopped.
+            if (final > 1) {
+                final = 1;
+                break;
+            }
+            if (final < 0) {
+                final = 0;
+                break;
+            }
+        }
+        return std::vector<double>({final, dist(p, (*this)(final))});
+    }
+
+    // generatePixels - Finds any pixel that's close enough to the main curve to be rendered depending on a specified thickness.
+    void generatePixels(double th) {
+        if (!configured)
+            configure();
+        double p = 0;
+        std::vector<linePixel> allFinal;
+        para dc = derive();
+        point dp;
+        while (p < 1) { // Potential pixels are analyzed from positions 0 to 1.
+            std::vector<point> potentials;
+            point initP = (*this)(p);
+            // The x and y values of the point at the current position are checked to see if they are close enough to whole numbers. The potential pixel positions are then extracted.
+            std::vector<bool> whole = std::vector<bool>({ equal(initP.x - int(initP.x), 0), equal(initP.y - int(initP.y), 0) });
+            if (whole[0] == whole[1]) {
+                if (whole[0])
+                    potentials.push_back(initP);
+                else {
+                    for (int i = 0; i < 4; i++)
+                        potentials.push_back(point(floor(initP.x) + floor(i / 2), floor(initP.y) + int((floor((i + 1) / 2))) % 2));
+                }
+            }
+            else {
+                if (whole[0]) {
+                    for (int i = 0; i < 2; i++)
+                        potentials.push_back(point(initP.x, floor(initP.y) + i));
+                }
+                else {
+                    for (int i = 0; i < 2; i++)
+                        potentials.push_back(point(floor(initP.x) + i, initP.y));
+                }
+            }
+            double highest = 0;
+            std::vector<linePixel> closeFinal;
+            for (int i = 0; i < potentials.size(); i++) {
+                // For every potential point, an approximation of closest position is made and used to advance the traversal.
+                // I don't even remember when I wrote this code. It would take a miracle to properly document this.
+                dp = dc(p);
+                double mag = (equal(sqrt(dp.x * dp.x + dp.y * dp.y), 0) ? limits.diagonal() : sqrt(dp.x * dp.x + dp.y * dp.y));
+                std::vector<double> range = std::vector<double>({ std::max(double(0), p - 1 / mag), std::min(double(1), p + 1 / mag) });
+                double fip = p;
+                bool run = true;
+                point lp;
+                point cep;
+                point hp;
+                double ld;
+                double ced;
+                double hd;
+                while (run) {
+                    lp = (*this)(range[0]);
+                    cep = (*this)(fip);
+                    hp = (*this)(range[1]);
+                    ld = dist(lp, potentials[i]);
+                    ced = dist(cep, potentials[i]);
+                    hd = dist(hp, potentials[i]);
+                    if (int(ld * 256) == int(ced * 256) || int(ced * 256) == int(hd * 256))
+                        run = false;
+                    if (ld < ced && ld < hd)
+                        range[1] = fip;
+                    else if (ced < ld && ced < hd) {
+                        range[0] += (fip - range[0]) / 2;
+                        range[1] += (fip - range[1]) / 2;
+                    }
+                    else if (hd < ld && hd < ced)
+                        range[0] = fip;
+                    fip = (range[0] + range[1]) / 2;
+                }
+                double fid = 0;
+                lp = (*this)(range[0]);
+                cep = (*this)(fip);
+                hp = (*this)(range[1]);
+                ld = dist(lp, potentials[i]);
+                ced = dist(cep, potentials[i]);
+                hd = dist(hp, potentials[i]);
+                if (ld < ced && ld < hd) {
+                    fip = range[0];
+                    fid = ld;
+                }
+                else if (ced < ld && ced < hd)
+                    fid = ced;
+                else if (hd < ld && hd < ced) {
+                    fip = range[1];
+                    fid = hd;
+                }
+                std::vector<double> test = std::vector<double>({ fip, fid });
+                if (test[1] < 1)
+                    closeFinal.push_back(linePixel(int(potentials[i].x), int(potentials[i].y), test[1]));
+                if (test[0] > highest && abs(test[0] - p) < 2 / mag)
+                    highest = test[0];
+            }
+            if (highest == p) {
+                dp = dc(p);
+                highest = p + 1 / (equal(sqrt(dp.x * dp.x + dp.y * dp.y), 0) ? limits.diagonal() : sqrt(dp.x * dp.x + dp.y * dp.y));
+                if (highest > 1)
+                    highest = 1;
+            }
+            for (int i = 0; i < closeFinal.size(); i++)
+                allFinal.push_back(closeFinal[i]);
+            p = highest;
+        }
+        std::vector<linePixel> extFinal; // For every potential point, an extension based off thickness is used to capture all necessary points.
+        for (int i = 0; i < allFinal.size(); i++) {
+            extFinal.push_back(allFinal[i]);
+            for (int j = -ceil((th - 1) / 2); j < ceil((th - 1) / 2) + 1; j++) {
+                for (int k = -ceil((th - 1) / 2); k < ceil((th - 1) / 2) + 1; k++) {
+                    if (!(j == 0 && k == 0))
+                        extFinal.push_back(linePixel(allFinal[i].x - j, allFinal[i].y - k, -1));
+                }
+            }
+        }
+        std::vector<linePixel> filteredFinal; // For every point, its closest distance to the main curve is found and stored as magnitude.
+        for (int i = 0; i < extFinal.size(); i++) {
+            bool found = false;
+            int j = 0;
+            while (j < filteredFinal.size() && !found) {
+                if (extFinal[i].x == filteredFinal[j].x && extFinal[i].y == filteredFinal[j].y)
+                    found = true;
+                j++;
+            }
+            if (!found) {
+                if (extFinal[i].mag == -1)
+                    extFinal[i].mag = findClosest(point(extFinal[i].x, extFinal[i].y))[1];
+                extFinal[i].mag -= (th - 1) / 2;
+                extFinal[i].mag = std::max(double(0), extFinal[i].mag);
+                if (extFinal[i].mag <= 1){
+                    extFinal[i].mag = 1-extFinal[i].mag;
+                    filteredFinal.push_back(extFinal[i]);
+                }
+            }
+        }
+        linePixels = filteredFinal;
     }
 };
 

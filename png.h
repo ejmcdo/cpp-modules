@@ -8,6 +8,7 @@
 #include <string>
 #include <file-handle.h>
 #include <zlib-handle.h>
+#include <color-handle.h>
 
 /*
 * paeth - Predictor model used in the parsing process.
@@ -26,26 +27,6 @@ int paeth(int a, int b, int c){
 }
 
 /*
-* pixel - Represents a single pixel in a .png image.
-*/
-struct pixel{
-    unsigned char r{};
-    unsigned char g{};
-    unsigned char b{};
-    unsigned char a{};
-
-    // Can either take 4 raw values or a vector as a constructor.
-    pixel(){}
-    pixel(unsigned char re, unsigned char gr, unsigned char bl, unsigned char al): r(re), g(gr), b(bl), a(al) {}
-    pixel(std::vector<unsigned char> vals): r(vals[0]), g(vals[1]), b(vals[2]), a(vals[3]) {}
-
-    // print - Prints the r, g, b, and a values.
-    void print(){
-        std::cout << int(r) << " " << int(g) << " " << int(b) << " " << int(a) << "\n";
-    }
-};
-
-/*
 * filter - Represents all of the models used during filtering.
 */
 enum filter{
@@ -57,7 +38,7 @@ enum filter{
 };
 
 /*
-*  matrix - Takes a .png image located at filename fn and parses it. Return a pixel matrix.
+*  matrix - Takes a .png image located at filename fn and parses it. Returns a pixel matrix.
 */
 std::vector<std::vector<pixel>> matrix(std::string fn){
     std::string sb = fileCont(fn);
