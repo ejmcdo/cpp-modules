@@ -1125,6 +1125,59 @@ struct linePixel {
 };
 
 /*
+* transformType - Represents a type of transformation.
+*/
+enum transformType{
+    TRANSLATE,
+    ROTATE,
+    SCALE,
+    P_TRANSLATE,
+    P_ROTATE,
+    P_SCALE,
+};
+
+/*
+* transformType - Represents a type of transformation.
+*/
+std::vector<std::string> transformNames = std::vector<std::string>({"Translate","Rotate","Scale","Progressive Translate","Progressive Rotate","Progressive Scale"});
+
+/*
+* transformation - Represents a transformation that can be given to a para object.
+*/
+struct transformNode {
+    transformType type{};
+    double val0{};
+    double val1{};
+    expr val2{};
+    expr val3{};
+    // If there are two double values, the type must be specifed because it could either mean a TRANSLATE or a SCALE. One double would a rotation around the origin using a single degree value.
+    // The same logic applies for progressive transformations.
+    transformNode(transformType t, double x, double y) : type(t), val0(x), val1(y) {}
+    transformNode() {}
+    transformNode(double x) : type(ROTATE), val0(x) {}
+    transformNode(transformType t, expr x, expr y) : type(t), val2(x), val3(y) {}
+    transformNode(expr x) : type(P_ROTATE), val3(x) {}
+
+    // print - Prints type of node and subsequent data.
+    void print() {
+        std::cout << transformNames[int(type)] << " | ";
+        if(type == TRANSLATE || type == SCALE)
+            std::cout << "x: " << val0 << ", y: " << val1;
+        else if(type == ROTATE)
+            std::cout << "degrees: " << val0;
+        else if(type == P_TRANSLATE || type == P_SCALE){
+            std::cout << "\nx:\n";
+            val2.print();
+            std::cout << "\ny:\n";
+        }
+        else{
+            std::cout << "\n";
+            val2.print();
+        }
+    }
+};
+
+/*
 * para - Represents a parametric curve with an x and y component.
 */
 struct para {
@@ -1495,6 +1548,87 @@ struct para {
         }
         linePixels = filteredFinal;
     }
+    para transform(std::vector<transformNode> sequence){
+        int xInd=0;
+        int yInd=0;
+        int cosInd=0;
+        int sinXInd=0;
+        int sinYInd=0;
+        expr samExp;
+        para sPara;
+        para final = copy();
+        for (unsigned int i = 0; i < sequence.size(); i++) {
+            switch (sequence[i].type) {
+            case TRANSLATE:
+                final.x.push(expNode(sequence[i].val0));
+                final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-2}),std::vector<int>({-1}) }), NONE_FUNC, false));
+                final.y.push(expNode(sequence[i].val1));
+                final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-2}),std::vector<int>({-1}) }), NONE_FUNC, false));
+                break;
+            case ROTATE:
+                samExp = final.x.copy();
+                xInd = int(samExp.l.size()) - 1;
+                samExp.attach(final.y);
+                yInd = int(samExp.l.size()) - 1;
+                samExp.push(expNode(cos(sequence[i].val0 * pi / 180)));
+                sPara.x = samExp.copy();
+                sPara.x.push(expNode(-sin(sequence[i].val0 * pi / 180)));
+                sPara.y = samExp.copy();
+                sPara.y.push(expNode(sin(sequence[i].val0 * pi / 180)));
+                sPara.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({xInd,-2}),std::vector<int>({yInd,-1}) }), NONE_FUNC, false));
+                sPara.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({yInd,-2}),std::vector<int>({xInd,-1}) }), NONE_FUNC, false));
+                final = sPara;
+                break;
+            case SCALE:
+                final.x.push(expNode(sequence[i].val0));
+                final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-2,-1}) }), NONE_FUNC, false));
+                final.y.push(expNode(sequence[i].val1));
+                final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-2,-1}) }), NONE_FUNC, false));
+                break;
+            case P_TRANSLATE:
+                xInd = int(final.x.l.size()) - 1;
+                final.x.attach(sequence[i].val2);
+                final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({xInd}),std::vector<int>({-1}) }), NONE_FUNC, false));
+                yInd = int(final.y.l.size()) - 1;
+                final.y.attach(sequence[i].val3);
+                final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({yInd}),std::vector<int>({-1}) }), NONE_FUNC, false));
+                break;
+            case P_ROTATE:
+                samExp = final.x.copy();
+                xInd = int(samExp.l.size()) - 1;
+                samExp.attach(final.y);
+                yInd = int(samExp.l.size()) - 1;
+                samExp.attach(sequence[i].val2);
+                samExp.push(expNode(pi / 180));
+                samExp.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({ -2, -1 }) }), COS, false));
+                cosInd = int(samExp.l.size()) - 1;
+                sPara.x = samExp.copy();
+                sPara.x.attach(sequence[i].val2);
+                sPara.x.push(expNode(pi / 180));
+                sPara.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({ -2, -1 }) }), SIN, true));
+                sinXInd = int(sPara.x.l.size()) - 1;
+                sPara.y = samExp.copy();
+                sPara.y.attach(sequence[i].val2);
+                sPara.y.push(expNode(pi / 180));
+                sPara.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({ -2, -1 }) }), SIN, false));
+                sinYInd = int(sPara.y.l.size()) - 1;
+                sPara.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({ xInd, cosInd }),std::vector<int>({ yInd, sinYInd }) }), NONE_FUNC, false));
+                sPara.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({ xInd, sinXInd }),std::vector<int>({ yInd, cosInd }) }), NONE_FUNC, false));
+                final = sPara;
+                break;
+            case P_SCALE:
+                xInd = int(final.x.l.size()) - 1;
+                final.x.attach(sequence[i].val2);
+                final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({xInd,-1}) }), NONE_FUNC, false));
+                yInd = int(final.y.l.size()) - 1;
+                final.y.attach(sequence[i].val3);
+                final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({yInd,-1}) }), NONE_FUNC, false));
+                break;
+            }
+        }
+        final.optimize();
+        return final;
+    }
 };
 
 /*
@@ -1522,3 +1656,139 @@ para bez(std::vector<point> co) {
     }
     return para(std::vector<expNode>({expNode(xPos, NONE_FUNC, false)}), std::vector<expNode>({expNode(yPos, NONE_FUNC, false)}));
 };
+
+/*
+* sinusoid - Creates a sinsuoid(circle, arc, or spiral) based on the radius and degree values.
+*/
+para sinusoid(point center, double initRadius, double termRadius, double degOffset, double degAmt) {
+    para final = para(expr(std::vector<expNode>({
+        expNode(center.x),
+        expNode(poly(std::vector<double>({termRadius - initRadius,initRadius})),NONE_FUNC,false),
+        expNode(poly(std::vector<double>({degAmt * pi / 180,degOffset * pi / 180})),COS,false),
+        expNode(std::vector<std::vector<int>>({std::vector<int>({0}),std::vector<int>({1,2})}),NONE_FUNC,false),
+        })), expr(std::vector<expNode>({
+            expNode(center.y),
+        expNode(poly(std::vector<double>({termRadius - initRadius,initRadius})),NONE_FUNC,false),
+        expNode(poly(std::vector<double>({degAmt * pi / 180,degOffset * pi / 180})),SIN,false),
+        expNode(std::vector<std::vector<int>>({std::vector<int>({0}),std::vector<int>({1,2})}),NONE_FUNC,false),
+            })));
+    final.optimize();
+    return final;
+}
+
+/*
+* compCurve - Takes the x component of para object x and y component of para object y and returns a new para object. Useful for sine waves.
+*/
+para compCurve(para x, para y) {
+    return para(x.x, y.y);
+}
+
+/*
+* transform - Takes a vector of para curves, transforms them based a sequence s, and returns the result.
+*/
+std::vector<para> transform(std::vector<para> l, std::vector<transformNode> s) {
+    std::vector<para> final;
+    for (unsigned int j = 0; j < l.size(); j++)
+        final.push_back(l[j].transform(s));
+    return final;
+};
+
+/*
+* wrap(standard) - Takes a para curve and "extends" it based off of reference values.
+*/
+para wrap(para c, double s, double e) {
+    // This operation requires both x and y components as well as their derivatives. expr object base serves as a start point for the final para.
+    expr base = c.x.copy();
+    if (!c.x.len())
+        base.push(expNode(0));
+    int xInd = int(base.len()) - 1;
+    expr dx = c.x.derive();
+    if (dx.len())
+        base.attach(dx);
+    else
+        base.push(expNode(0));
+    int dxInd = int(base.len()) - 1;
+    if (c.y.len())
+        base.attach(c.y);
+    else
+        base.push(expNode(0));
+    int yInd = int(base.len()) - 1;
+    expr dy = c.y.derive();
+    if (dy.len())
+        base.attach(dy);
+    else
+        base.push(expNode(0));
+    int dyInd = int(base.len()) - 1;
+    base.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({dxInd,dxInd}),std::vector<int>({dyInd,dyInd}) }), SQRT, false));
+    int den = int(base.len()) - 1;
+    para final = para(base.copy(),base.copy());
+    final.x.push(expNode(poly(std::vector<double>({ e - s,s })), NONE_FUNC, false));
+    final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-1,dyInd}) }), NONE_FUNC, false));
+    final.x.push(expNode(std::vector<int>({ -1,den }), NONE_FUNC, false));
+    final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({xInd}) ,  std::vector<int>({-1}) }), NONE_FUNC, false));
+    final.y.push(expNode(poly(std::vector<double>({ s - e,-s })), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-1,dxInd}) }), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<int>({ -1,den }), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({yInd}) ,  std::vector<int>({-1}) }), NONE_FUNC, false));
+    final.optimize();
+    return final;
+}
+
+/*
+* quickTransform - For use in para objects used as references in progressive wraps and warps.
+*/
+struct quickTransform {
+    double scale{};
+    double translation{};
+    quickTransform() {}
+    quickTransform(double s, double t) : scale(s), translation(t) {}
+};
+
+/*
+* wrap(progressive) - Takes a para curve and "extends" based off a reference curve.
+*/
+para wrap(para c, expr a, quickTransform t) {
+    expr xSuff = a.copy();
+    xSuff.push(expNode(t.scale));
+    xSuff.push(expNode(t.translation));
+    xSuff.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-3,-2}),std::vector<int>({-1}) }), NONE_FUNC, false));
+    expr ySuff = a.copy();
+    ySuff.push(expNode(t.scale));
+    ySuff.push(expNode(t.translation));
+    ySuff.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-3,-2}),std::vector<int>({-1}) }), NONE_FUNC, true));
+    expr base = c.x.copy();
+    if (!c.x.len())
+        base.push(expNode(0));
+    int xInd = int(base.len()) - 1;
+    expr dx = c.x.derive();
+    if (dx.len())
+        base.attach(dx);
+    else
+        base.push(expNode(0));
+    int dxInd = int(base.len()) - 1;
+    if (c.y.len())
+        base.attach(c.y);
+    else
+        base.push(expNode(0));
+    int yInd = int(base.len()) - 1;
+    expr dy = c.y.derive();
+    if (dy.len())
+        base.attach(dy);
+    else
+        base.push(expNode(0));
+    int dyInd = int(base.len()) - 1;
+    base.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({dxInd,dxInd}),std::vector<int>({dyInd,dyInd}) }), SQRT, false));
+    int den = int(base.len()) - 1;
+    para final = para(base.copy(),base.copy());
+    final.x.attach(xSuff);
+    final.y.attach(ySuff);
+    final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-1,dyInd}) }), NONE_FUNC, false));
+    final.x.push(expNode(std::vector<int>({ -1,den }), NONE_FUNC, false));
+    final.x.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({xInd}) ,  std::vector<int>({-1}) }), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-1,dxInd}) }), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<int>({ -1,den }), NONE_FUNC, false));
+    final.y.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({yInd}) ,  std::vector<int>({-1}) }), NONE_FUNC, false));
+    final.optimize();
+    return final;
+}
+
