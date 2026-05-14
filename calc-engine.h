@@ -604,7 +604,10 @@ struct expr {
         expr final = copy();
         int subInd = final.len()-1;
         final.attach(n);
-        final.l[final.len()-1].n = !final.l[final.len()-1].n;
+        if(final.l[final.len()-1].type == CONSTANT)
+            final.l[final.len()-1].val3 *= -1;
+        else
+            final.l[final.len()-1].n = !final.l[final.len()-1].n;
         final.push(expNode(std::vector<std::vector<int>>({std::vector<int>({subInd}),std::vector<int>({-1})}),NONE_FUNC,false));
         return final;
     }
@@ -1595,8 +1598,8 @@ struct para {
         linePixels = filteredFinal;
     }
 
-    // transform(multi) - Takes the source para and transforms it using a sequence of transformNodes.
-    para transform(std::vector<transformNode> sequence){
+    // transform(singular) - Takes the source para and transforms it using a single transformNode.
+    para transform(transformNode node){
         int xInd=0;
         int yInd=0;
         int cosInd=0;
@@ -1605,39 +1608,40 @@ struct para {
         expr samExp;
         para sPara;
         para final = copy();
-        for (unsigned int i = 0; i < sequence.size(); i++) {
-            switch (sequence[i].type) {
-            case TRANSLATE:
-                final.x += sequence[i].val0;
-                final.y += sequence[i].val1;
-                break;
-            case ROTATE:
-                final = para(final.x*cos(sequence[i].val0 * pi / 180)-final.y*sin(sequence[i].val0 * pi / 180),final.y*cos(sequence[i].val0 * pi / 180)+final.x*sin(sequence[i].val0 * pi / 180));
-                break;
-            case SCALE:
-                final.x *= sequence[i].val0;
-                final.y *= sequence[i].val1;
-                break;
-            case P_TRANSLATE:
-                final.x += sequence[i].val2;
-                final.y += sequence[i].val3;
-                break;
-            case P_ROTATE:
-                final = para(final.x*cos(sequence[i].val2 * pi / 180)-final.y*sin(sequence[i].val2 * pi / 180),final.y*cos(sequence[i].val2 * pi / 180)+final.x*sin(sequence[i].val2 * pi / 180));
-                break;
-            case P_SCALE:
-                final.x *= sequence[i].val2;
-                final.y *= sequence[i].val3;
-                break;
-            }
+        switch (node.type) {
+        case TRANSLATE:
+            final.x += node.val0;
+            final.y += node.val1;
+            break;
+        case ROTATE:
+            final = para(final.x*cos(node.val0 * pi / 180)-final.y*sin(node.val0 * pi / 180),final.y*cos(node.val0 * pi / 180)+final.x*sin(node.val0 * pi / 180));
+            break;
+        case SCALE:
+            final.x *= node.val0;
+            final.y *= node.val1;
+            break;
+        case P_TRANSLATE:
+            final.x += node.val2;
+            final.y += node.val3;
+            break;
+        case P_ROTATE:
+            final = para(final.x*cos(node.val2 * pi / 180)-final.y*sin(node.val2 * pi / 180),final.y*cos(node.val2 * pi / 180)+final.x*sin(node.val2 * pi / 180));
+            break;
+        case P_SCALE:
+            final.x *= node.val2;
+            final.y *= node.val3;
+            break;
         }
         final.optimize();
         return final;
     }
 
-    // transform(singluar) - Similar to transform, except only a single trasformNode is used. Made to bypass needing to create a whole vector for a single transformation.
-    para transform(transformNode sequence){
-        return transform(std::vector<transformNode>({sequence}));
+    // transform(multi) - Takes the source para and transforms it using a sequence of transformNodes.
+    para transform(std::vector<transformNode> sequence){
+        para final;
+        for (unsigned int i = 0; i < sequence.size(); i++)
+            final = transform(sequence[i]);
+        return final;
     }
 };
 
@@ -1797,3 +1801,52 @@ std::vector<para> doubleWarp(para b1, para b2, std::vector<para> l, point scope,
     return final;
 }
 
+/*
+* quadWarp(singluar) - Takes sample curve l and maps it onto the bases.
+*/
+para quadWarp(para sa, para na, para wa, para ea, para l, point scope, point offset){
+    expr sx = (l.x+offset.x)/scope.x;
+    expr sy = (l.y+offset.y)/scope.y;
+    expr wcx = comp(wa.x, sy);
+    expr wcy = comp(wa.y, sy);
+    expr ecx = comp(ea.x, sy);
+    expr ecy = comp(ea.y, sy);
+    point swc = sa(0);
+    point sec = sa(1);
+    point nwc = na(0);
+    point nec = na(1);
+    expr scx = comp(sa.x-poly(std::vector<double>({sec.x - swc.x, swc.x})), sx);
+    expr scy = comp(sa.y-poly(std::vector<double>({sec.y - swc.y, swc.y})), sx);
+    expr ncx = comp(na.x-poly(std::vector<double>({nec.x - nwc.x, nwc.x})), sx);
+    expr ncy = comp(na.y-poly(std::vector<double>({nec.y - nwc.y, nwc.y})), sx);
+    expr fx1 = wcx+((ecx-wcx)*sx)+(scx*(expr(1)-sy))+ncx*sy;
+    expr fy1 = wcy+((ecy-wcy)*sx)+(scy*(expr(1)-sy))+ncy*sy;
+
+    expr wcx2 = comp(sa.x, sx);
+    expr wcy2 = comp(sa.y, sx);
+    expr ecx2 = comp(na.x, sx);
+    expr ecy2 = comp(na.y, sx);
+    point swc2 = wa(0);
+    point sec2 = wa(1);
+    point nwc2 = ea(0);
+    point nec2 = ea(1);
+    expr scx2 = comp(wa.x-poly(std::vector<double>({sec2.x - swc2.x, swc2.x})), sy);
+    expr scy2 = comp(wa.y-poly(std::vector<double>({sec2.y - swc2.y, swc2.y})), sy);
+    expr ncx2 = comp(ea.x-poly(std::vector<double>({nec2.x - nwc2.x, nwc2.x})), sy);
+    expr ncy2 = comp(ea.y-poly(std::vector<double>({nec2.y - nwc2.y, nwc2.y})), sy);
+    expr fx2 = wcx2+((ecx2-wcx2)*sy)+(scx2*(expr(1)-sx))+ncx2*sx;
+    expr fy2 = wcy2+((ecy2-wcy2)*sy)+(scy2*(expr(1)-sx))+ncy2*sx;
+    para final = para((fx1+fx2)/2,(fy1+fy2)/2);
+    final.optimize();
+    return final;
+}
+
+/*
+* quadWarp(multi) - Takes sample curve vector l and maps all curves onto the bases.
+*/
+std::vector<para> quadWarp(para sa, para na, para wa, para ea, std::vector<para> l, point scope, point offset){
+    std::vector<para> final;
+    for(int i=0;i<l.size();i++)
+        final.push_back(quadWarp(sa, na, wa, ea,l[i],scope,offset));
+    return final;
+}
