@@ -909,18 +909,21 @@ struct expr {
             }
             // Once the derivative of the original expression is calculated, a function type may alter it afterwards.
             switch (final.l[i].f) {
+            case NONE_FUNC: // For SQRT functions, the derivative is evaluated as A/(2*sqrt(a)).
+                final.l[final.len()-1].n = final.l[i].n;
+                break;
             case SQRT: // For SQRT functions, the derivative is evaluated as A/(2*sqrt(a)).
                 final.push(expNode(2));
                 final.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({int(i),-1}) }), NONE_FUNC, false));
                 final.push(expNode(std::vector<int>({ -3,-1 }), NONE_FUNC, false));
                 break;
-            case SIN: // For SIN functions, the derivative is evaluated as Acos(a)
+            case SIN: // For SIN functions, the derivative is evaluated as Acos(a).
                 sNode = final.l[i];
                 sNode.f = COS;
                 final.push(sNode);
                 final.push(expNode(std::vector<std::vector<int>>({ std::vector<int>({-2,-1}) }), NONE_FUNC, false));
                 break;
-            case COS: // For COS functions, the derivative is evaluated as -Asin(a)
+            case COS: // For COS functions, the derivative is evaluated as -Asin(a).
                 sNode = final.l[i];
                 sNode.f = SIN;
                 sNode.n = !sNode.n;
@@ -1513,6 +1516,8 @@ struct para {
                 double ld;
                 double ced;
                 double hd;
+                //if(potentials[i].x == 58 and potentials[i].y == 56)
+                    //std::cout << p << "\n";
                 while (run) {
                     lp = (*this)(range[0]);
                     cep = (*this)(fip);
@@ -1638,9 +1643,9 @@ struct para {
 
     // transform(multi) - Takes the source para and transforms it using a sequence of transformNodes.
     para transform(std::vector<transformNode> sequence){
-        para final;
+        para final = copy();
         for (unsigned int i = 0; i < sequence.size(); i++)
-            final = transform(sequence[i]);
+            final = final.transform(sequence[i]);
         return final;
     }
 };
