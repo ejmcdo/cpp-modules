@@ -909,7 +909,7 @@ struct expr {
             }
             // Once the derivative of the original expression is calculated, a function type may alter it afterwards.
             switch (final.l[i].f) {
-            case NONE_FUNC: // For SQRT functions, the derivative is evaluated as A/(2*sqrt(a)).
+            case NONE_FUNC: // Ensuring negation remains the same.
                 final.l[final.len()-1].n = final.l[i].n;
                 break;
             case SQRT: // For SQRT functions, the derivative is evaluated as A/(2*sqrt(a)).
