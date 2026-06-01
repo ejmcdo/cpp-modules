@@ -1,5 +1,5 @@
 /*
-* Video files were way to difficult to dechiper, so I had to settle for a .gif encoder. Such is life.
+* Video files were way to difficult to decipher, so I had to settle for a .gif encoder. Such is life.
 */
 #pragma once
 #include <iostream>

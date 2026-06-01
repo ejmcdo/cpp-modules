@@ -431,6 +431,7 @@ bool has(std::vector<double> l, double n) {
     return found;
 }
 
+int cap = 1000000;
 /*
 * exp - Represents a full expression using mathematical functions(square root, sin, cosine) and different combinations of them.
 */
@@ -441,6 +442,8 @@ struct expr {
 
     // critPoints - Vector the represents any zeros or asymptotes the expression may have(typically within the range of 0 <= x <= 1).
     std::vector<critPoint> critPoints;
+    std::vector<double> zeros;
+    std::vector<double> asymp;
 
     // Constructors taken a list of expNodes, a single poly object(with or without function specified), or a constant.
     expr() {}
@@ -456,7 +459,7 @@ struct expr {
 
     // f - Takes a value x and return the function of x.
     double operator()(double x) {
-        std::vector<double> valStore; // Vector that stores values during evaluation. For each expNode, the values are evaluated and stored for future use
+        std::vector<double> valStore; // Vector that stores values during evaluation. For each expNode, the values are evaluated and stored for future use.
         for (unsigned int i = 0; i < len(); i++) {
             double cVal = 0;
             switch (l[i].type) {
@@ -534,8 +537,22 @@ struct expr {
         for (unsigned int i = 0; i < len(); i++) {
             std::cout << i << " {" << expNodeNames[l[i].type] << "} ";
             l[i].print();
-            std::cout << std::endl;
+            std::cout << "\n";
         }
+        if(zeros.size()){
+            std::cout << "\nZeros: ";
+            for(int i=0;i<zeros.size();i++)
+                std::cout << zeros[i] << " ";
+        }
+        else
+            std::cout << "\nNo zeros";
+        if(asymp.size()){
+            std::cout << "\nAsymptotes: ";
+            for(int i=0;i<asymp.size();i++)
+                std::cout << asymp[i] << " ";
+        }
+        else
+            std::cout << "\nNo asymptotes\n";
     }
 
     // attach - Takes another exp object and attaches it to the current exp object.
@@ -633,6 +650,7 @@ struct expr {
         int divInd = final.len()-1;
         final.attach(n);
         final.push(expNode(std::vector<int>({divInd,-1}),NONE_FUNC,false));
+        final.optimize();
         return final;
     }
 
@@ -653,11 +671,31 @@ struct expr {
             (*this) *= (*this);
     }
 
+    bool operator==(expr n){
+        bool final = (len() == n.len());
+        if(final){
+            for(int i=0;i<len();i++){
+                if(l[i] != n.l[i])
+                    final = false;
+            }
+        }
+        return final;
+    }
+
+    bool operator!=(expr n){
+        return !((*this) == n);
+    }
+
     // optimize - Removes any unecessary nodes from the vector(copied values, zero/one constants, etc.)
     void optimize() {
         if (!l.size()) // Function ends if there are either 1) no values in the node list, or 2) the last value is either of type POLYNOMIAL or CONSTANT.
             return;
-        if (l[l.size() - 1].type == POLYNOMIAL || l[l.size() - 1].type == CONSTANT) {
+        if (l[l.size() - 1].type == POLYNOMIAL) {
+            l.erase(l.begin(), l.begin() + (l.size() - 1));
+            l[0] = expNode(poly(l[0].val0.c),l[0].f,l[0].n);
+            return;
+        }
+        else if (l[l.size() - 1].type == CONSTANT) {
             l.erase(l.begin(), l.begin() + (l.size() - 1));
             return;
         }
@@ -669,6 +707,8 @@ struct expr {
                 nodeSpec.push_back(optNodeSpec());
                 discOne sDiscOne = NEITHER; // Sample discOne value. Every node starts off as NEITHER until proven otherwise.
                 nodeSpec[i].dep = false; // Every node starts off as not dependent until proven otherwise. The proving algorithm is used later on.
+                if(l[i].type == POLYNOMIAL)
+                    l[i] = expNode(poly(l[i].val0.c),l[i].f,l[i].n); // If a POLYNOMIAL type has only one coefficient, this turns it into a CONSTANT type.
                 switch (l[i].type) {
                 case POLYNOMIAL: // For POLYNOMIAL types, if there are no values in the poly object's vector, the initial value is 0 and function-based calculations are made to the determine the final value.
                     if (!l[i].val0.c.size()) {
@@ -741,11 +781,15 @@ struct expr {
                     for (unsigned int j = 0; j < l[i].val1.size(); j++) {
                         std::vector<int> sVec;
                         bool isZero = false;
+                        bool isOne = true;
                         int k = 0;
+                        int newValue = 0;
                         while (k < l[i].val1[j].size() && !isZero) {
                             isZero = (nodeSpec[l[i].val1[j][k]].d == IS_DISC);
                             if (!isZero) {
-                                int newValue = 0;
+                                if(nodeSpec[l[i].val1[j][k]].d != IS_ONE)
+                                    isOne = false;
+                                newValue = 0;
                                 if (nodeSpec[l[i].val1[j][k]].copy > -1)
                                     newValue = nodeSpec[l[i].val1[j][k]].copy;
                                 else
@@ -755,6 +799,8 @@ struct expr {
                             }
                             k++;
                         }
+                        if(isOne && l[i].val1[j].size() > 1)
+                            sVec.push_back(newValue);
                         if (!isZero)
                             sMat.push_back(sVec);
                     }
@@ -878,6 +924,8 @@ struct expr {
             switch (final.l[i].type) {
             case POLYNOMIAL: // For POLYNOMIAL types, the derivative of the polynomial is calculated and stored.
                 final.push(expNode(final.l[i].val0.derive(), NONE_FUNC, false));
+                if(final.l[i].n && final.l[final.len()-1].type == CONSTANT && final.l[i].f == NONE_FUNC)
+                    final.l[final.len()-1].val3 *= -1; // If the derivative of a POLYNOMIAL type becomes a constant and is negated, the constant must reflect that.
                 break;
             case COMPOUND:
                 // For COMPOUND types, the chain rule is used to find the derivative. Both normal terms and derivative terms are used alike.
@@ -933,7 +981,7 @@ struct expr {
             }
             dTerms.push_back(int(final.l.size()) - 1); // Every term is evaluated and stored. This final evaluated term is the derivative of the original expression.
         }
-        final.optimize(); // Especially in the cases of multiple-order derivatives, many empty value/copies can be present. The optimization function greatly assists with such cases.
+        //final.optimize(); // Especially in the cases of multiple-order derivatives, many empty value/copies can be present. The optimization function greatly assists with such cases.
         return final;
     }
 
@@ -945,6 +993,165 @@ struct expr {
                 final.l[i].val0 = final.l[i].val0.slice(s, e);
         }
         return final;
+    }
+
+    // getZeros - Gets any zeros the expression might have and stores them. Takes into account any possible asymptotes the expression has and scans around them.
+    void getZeros(int cont){
+        if(asymp.size()){ // If there are any asymptotes, the function is split into pieces and each piece is scanned separately for zeros.
+            std::vector<double> sortedAsymp;
+            int lowestInd=0;
+            double lowestVal=asymp[0];
+            int count=0;
+            while(asymp.size()){ // All the asymptotes are sorted from least to greatest before splitting.
+                if(asymp[count] < lowestVal){
+                    lowestInd = count;
+                    lowestVal = asymp[count];
+                }
+                count++;
+                if(count == asymp.size()){
+                    if(sortedAsymp.size()){
+                        if(!equal(asymp[lowestInd],sortedAsymp[sortedAsymp.size()-1]))
+                            sortedAsymp.push_back(asymp[lowestInd]);
+                    }
+                    else
+                        sortedAsymp.push_back(asymp[lowestInd]);
+                    asymp.erase(asymp.begin() + lowestInd, asymp.begin() + lowestInd + 1);
+                    if(asymp.size()){
+                        count = 0;
+                        lowestInd = 0;
+                        lowestVal = asymp[0];
+                    }
+                }
+            }
+            asymp = sortedAsymp;
+            std::vector<double> splits = std::vector<double>({0});
+            for(int i=0;i<asymp.size();i++){
+                if(!equal(asymp[i],splits[splits.size()-1]) && !equal(asymp[i],1))
+                    splits.push_back(asymp[i]);
+            }
+            splits.push_back(1);
+            std::vector<expr> pieces;
+            for(int i=0;i<splits.size()-1;i++)
+                pieces.push_back(slice(splits[i],splits[i+1]));
+            zeros.clear();
+            int contCheck=0; // For each piece, a continuance check is set depending on what side has an asmyptote. 1 for right side, 2 for left side, 3 for both.
+            for(int i=0;i<pieces.size();i++){
+                if(!i)
+                    contCheck = 1;
+                else if(i == pieces.size()-1)
+                    contCheck = 2;
+                else
+                    contCheck = 3;
+                pieces[i].getZeros(contCheck); // For each piece, no asymptotes are added in, so when getZeros is called for it, the standard function is called and the zeros within that piece are stored.
+                for(int j=0;j<pieces[i].zeros.size();j++)
+                    zeros.push_back(pieces[i].zeros[j]*(splits[i+1]-splits[i])+splits[i]);
+            }
+        }
+        else{ // If there are no asymptotes, the standard function is called.
+            double bp=0;
+            std::vector<double> ran = std::vector<double>({0.001*int(cont/2),double(1)-0.001*(cont%2)}); // Depending on the continuance check, the searchable range for the expression is defined.
+            std::vector<double> mm = std::vector<double>({(*this)(0),(*this)(0)}); // In the case of ultra-microscopic expressions, a zero may mistakenly be caught for every value scanned
+                                                                                   // If the estimated range of the expression is less than 1, then each value scanned is divided by the range to normalize it.
+            for(double i=0;i<=1;i+=0.1){
+                if((*this)(i) < mm[0])
+                    mm[0] = (*this)(i);
+                if((*this)(i) > mm[1])
+                    mm[1] = (*this)(i);
+            }
+            double p=ran[0];
+            double pp=ran[0];
+            double bpp=0;
+            critPoints.clear();
+            if(equal((*this)(0),0) && (cont == 0 || cont == 1))
+                zeros.push_back(0);
+            if(equal((*this)(1),0) && (cont == 0 || cont == 2))
+                zeros.push_back(1);
+            std::vector<std::vector<double>> est;
+            bool run = true;
+            while(run){
+                p += 0.001; // As much as it pains me to implement, the function is searched at a rate of 1/1000. Due to sheer nuance, this was unavoidable.
+                if(p>ran[1]){
+                    p = ran[1];
+                    run = false;
+                }
+                bp = (*this)(p);
+                bpp = (*this)(pp);
+                if(equal(bp/std::min(mm[1]-mm[0],double(1)),0)) // If the search value lands directly on(or negligibly close to) a zero, its automatically added to the list.
+                    zeros.push_back(p);
+                else if(bp*bpp < 0) // If the sign changes since the previous iteration, that means a zero is in between those two values, which are added to an estimation list.
+                    est.push_back(std::vector<double>({pp, p}));
+                pp=p;
+            }
+            double mid=0;
+            double pvm;
+            double vl;
+            double vm;
+            double vh;
+            int count = 0;
+            for(int i=0;i<est.size();i++){ // For each estimation, the midpoint is taken and the range is altered depending on the sign of the value evaluated at the midpoint.
+                                           // Once the midpoint is negligibly close to 0, the zero is stored and the estimation while loop is stopped.
+                run=true;
+                pvm=0;
+                while(run && count < cap){
+                    mid = (est[i][0]+est[i][1])/2;
+                    vl=(*this)(est[i][0])/std::min(mm[1]-mm[0],double(1));
+                    vm=(*this)(mid)/std::min(mm[1]-mm[0],double(1));
+                    vh=(*this)(est[i][1])/std::min(mm[1]-mm[0],double(1));
+                    if(vl*vm < 0)
+                        est[i][1] = mid;
+                    else if(vh*vm < 0)
+                        est[i][0] = mid;
+                    run = (!equal(vm,0)) || equal(pvm,vm);
+                    pvm=vm;
+                    count++;
+                }
+                if(count == 1000000)
+                    print();
+                zeros.push_back(mid);
+            }
+        }
+    }
+
+    // analyze - Analyzes the entire function and finds any zeros and asymptotes it has.
+    void analyze(){
+        std::vector<expr> trav;
+        for(int i=0;i<len();i++){
+            if(l[i].type == FRACTION){ // The only time a function has an asymptote is if a denominator value has 0. The function finds all denominators indicies and evaluates them for zeros.
+                expr m = copy();
+                m.l.erase(m.l.begin() + (l[i].val2[1]+1), m.l.begin() + m.l.size());
+                m.optimize();
+                trav.push_back(m);
+            }
+        }
+        trav.push_back(copy());
+        for(int i=0;i<trav.size();i++){
+            std::vector<int> frac;
+            for(int j=0;j<trav[i].len();j++){
+                if(trav[i].l[j].type == FRACTION)
+                    frac.push_back(trav[i].l[j].val2[1]);
+            }
+            trav[i].asymp.clear();
+            if(frac.size()){
+                for(int j=0;j<frac.size();j++){ // As more subfractions are analyzed, the zeros of their denominators are stored as asymptotes.
+                    expr n = trav[i].copy();
+                    n.l.erase(n.l.begin() + (frac[j]+1), n.l.begin() + n.l.size());
+                    n.optimize();
+                    int count = i-1;
+                    bool run=true;
+                    while(run && count > -1){
+                        if(trav[count] == n){
+                            for(int k=0;k<trav[count].zeros.size();k++)
+                                trav[i].asymp.push_back(trav[count].zeros[k]);
+                            run = false;
+                        }
+                        count--;
+                    }
+                }
+            }
+            trav[i].getZeros(0);
+        }
+        zeros = trav[trav.size()-1].zeros;
+        asymp = trav[trav.size()-1].asymp;
     }
 };
 
@@ -1049,7 +1256,7 @@ struct point {
 
     // print - Prints x and y.
     void print() {
-        std::cout << x << ", " << y;
+        std::cout << x << ", " << y << "\n";
     }
 
     // Operator overload == - Compares the x and y values using the modified equivalence check and returns true if both are equal.
@@ -1083,6 +1290,10 @@ struct point {
         return final;
     }
 };
+
+point midpoint(point p1, point p2){
+    return point((p1.x+p2.x)/2,(p1.y+p2.y)/2);
+}
 
 /*
 * dist - Calculates the distance between two points.
@@ -1130,6 +1341,43 @@ struct ps {
 };
 
 /*
+* psInterResult - Represents an intersection between two lines created by ps objects.
+*/
+struct psInterResult {
+    point result{};
+    bool valid{};
+    psInterResult() {}
+    psInterResult(point r, bool v) : result(r), valid(v) {}
+};
+
+/*
+* psInter - Takes two ps objects and finds their intersection point(if applicable).
+*/
+psInterResult psInter(ps l1, ps l2) {
+    psInterResult final;
+    final.valid = true;
+    double v1 = 0;
+    double v2 = 0;
+    if (l1.yFunc == l2.yFunc) {
+        if (l1.m == l2.m)
+            final.valid = false; // If the slopes of each line are equal, there is no intersection point and valid is set to false.
+        else {
+            v1 = (l2.b - l1.b) / (l1.m - l2.m);
+            v2 = (l2.b * l1.m - l1.b * l2.m) / (l1.m - l2.m);
+        }
+    }
+    else { // Case for when the lines have differing functions of and x and y.
+        v1 = (l2.m * l1.b + l2.b) / (1 - l1.m * l2.m);
+        v2 = (l1.m * l2.b + l1.b) / (1 - l1.m * l2.m);
+    }
+    if (l1.yFunc)
+        final.result = point(v1, v2);
+    else
+        final.result = point(v2, v1);
+    return final;
+};
+
+/*
 * bounds - Represents a rectangular area with minimums and maximums.
 */
 struct bounds {
@@ -1147,7 +1395,7 @@ struct bounds {
 
     // print - Prints the minimums and the maximums.
     void print() {
-        std::cout << minX << " " << minY << " " << maxX << " " << maxY;
+        std::cout << minX << " " << minY << " " << maxX << " " << maxY << "\n";
     }
 
     // diagonal - Returns the distance between the minimum point and the maximum point.
@@ -1236,7 +1484,7 @@ struct para {
     expr y{};
 
     // configured - Set to true to avoid unnecessary reconfiguration of cached values.
-    bool configured{};
+    bool configured=false;
 
     // positions, main/deriv/doubleDeriv points - Cached values to avoid constant recalculation. Configured once per curve.
     std::vector<double> positions;
@@ -1248,11 +1496,11 @@ struct para {
     bounds limits;
 
     // length - Approximate length of the curve.
-    double length;
+    double length=0;
 
     // start/end An - Initial and terminal angles of the direction vector of the curve(in radians).
-    double startAn;
-    double endAn;
+    double startAn=0;
+    double endAn=0;
 
     // linePixels - Pixel positions and magnitudes to be rendered for the curve in an image.
     std::vector<linePixel> linePixels;
@@ -1516,8 +1764,6 @@ struct para {
                 double ld;
                 double ced;
                 double hd;
-                //if(potentials[i].x == 58 and potentials[i].y == 56)
-                    //std::cout << p << "\n";
                 while (run) {
                     lp = (*this)(range[0]);
                     cep = (*this)(fip);
@@ -1720,13 +1966,13 @@ struct quickTransform {
 */
 para extend(para c, expr a, quickTransform t){
     para dc = c.derive();
-    para final = para(c.x+(a*dc.y)/sqrt((dc.x^2)+(dc.y^2)),c.y-(a*dc.x)/sqrt((dc.x^2)+(dc.y^2)));
+    para final = para(c.x+((a*t.scale+t.translation)*dc.y)/sqrt((dc.x^2)+(dc.y^2)),c.y-((a*t.scale+t.translation)*dc.x)/sqrt((dc.x^2)+(dc.y^2)));
     final.optimize();
     return final;
 }
 
 /*
-* extend(constant) - Takes a para and "extends" it based of a constant value.
+* extend(constant) - Takes a para and "extends" it based off a constant value.
 */
 para extend(para c, double a){
     para final = extend(c, expr(a), quickTransform(1,0));
@@ -1855,3 +2101,617 @@ std::vector<para> quadWarp(para sa, para na, para wa, para ea, std::vector<para>
         final.push_back(quadWarp(sa, na, wa, ea,l[i],scope,offset));
     return final;
 }
+
+/*
+* intersection - Represents an intersection between two curves, with prog1 and prog2 being the values at which the intersection point for each curve occurs respectfully.
+*/
+struct intersection {
+    double prog1{};
+    double prog2{};
+    intersection() {}
+    intersection(double p1, double p2) : prog1(p1), prog2(p2) {}
+    void print() {
+        std::cout << prog1 << ", " << prog2 << "\n";
+    };
+};
+
+/*
+* findInters - Takes para curves p1 and p2 and find any intersection point between them.
+*/
+std::vector<intersection> findInters(para p1, para p2) {
+    p1.configure();
+    p2.configure();
+    double pr1;
+    double pr2;
+    ps s1;
+    ps s2;
+    std::vector<intersection> ints{};
+    std::vector<std::vector<int>> listInds{}; // Because there could be multiple intersections between two curves, an estimation algorithm is used to find any probable points of intersection.
+    for (unsigned int i = 0; i < p1.mainPoints.size() - 1; i++) {
+        for (unsigned int j = 0; j < p2.mainPoints.size() - 1; j++) {
+            if (p1.mainPoints[i] != p1.mainPoints[i + 1] && p2.mainPoints[j] != p2.mainPoints[j + 1]) {
+                pr1 = 0;
+                pr2 = 0;
+                s1 = ps(p1.mainPoints[i], p1.mainPoints[i + 1]);
+                s2 = ps(p2.mainPoints[j], p2.mainPoints[j + 1]);
+                psInterResult inte = psInter(s1, s2); // Each line created by the mainPoints cache is made into a ps object and is checked for any intersections.
+                if (inte.valid) {
+                    if (s1.yFunc)
+                        pr1 = (inte.result.x - p1.mainPoints[i].x) / (p1.mainPoints[i + 1].x - p1.mainPoints[i].x);
+                    else
+                        pr1 = (inte.result.y - p1.mainPoints[i].y) / (p1.mainPoints[i + 1].y - p1.mainPoints[i].y);
+                    if (s2.yFunc)
+                        pr2 = (inte.result.x - p2.mainPoints[j].x) / (p2.mainPoints[j + 1].x - p2.mainPoints[j].x);
+                    else
+                        pr2 = (inte.result.y - p2.mainPoints[j].y) / (p2.mainPoints[j + 1].y - p2.mainPoints[j].y);
+                    if (pr1 >= 0 && pr1 <= 1 && pr2 >= 0 && pr2 <= 1) { // An estimation is only added if the intersection point lies inbetween the cached points.
+                        ints.push_back(intersection(p1.positions[i] + (p1.positions[i + 1] - p1.positions[i]) * pr1, p2.positions[j] + (p2.positions[j + 1] - p2.positions[j]) * pr2));
+                        listInds.push_back(std::vector<int>({ int(i),int(j) }));
+                    }
+                }
+            }
+        }
+    }
+    std::vector<intersection> final;
+    intersection sub;
+    int finalIndex[2] = { 0,0 };
+    double subStartPoint;
+    double mag1;
+    double mag2;
+    int startPoint;
+    double sampleDist;
+    double po1;
+    double po2;
+    point sp1;
+    point sp2;
+    double tDis;
+    for (unsigned int i = 0; i < ints.size(); i++) {
+        sub.prog1 = ints[i].prog1;
+        sub.prog2 = ints[i].prog2;
+        finalIndex[0] = 0;
+        finalIndex[1] = 0;
+        if (ints.size() > 1) { // If there are two or more estimations, they may be too close to each other for proper detection. A logarithmic start point is calculated based off how close the estimations are to each other.
+            if (i == 0)
+                subStartPoint = std::min(abs(ints[0].prog1 - ints[1].prog1), abs(ints[0].prog2 - ints[1].prog2));
+            else if (i == ints.size() - 1)
+                subStartPoint = std::min(abs(ints[ints.size() - 1].prog1 - ints[ints.size() - 2].prog1), abs(ints[ints.size() - 1].prog2 - ints[ints.size() - 2].prog2));
+            else
+                subStartPoint = std::min(std::min(abs(ints[i - 1].prog1 - ints[i].prog1), abs(ints[i - 1].prog2 - ints[i].prog2)), std::min(abs(ints[i + 1].prog1 - ints[i].prog1), abs(ints[i + 1].prog2 - ints[i].prog2)));
+            startPoint = static_cast<int>(abs(floor(log10(subStartPoint))) + 1);
+        }
+        else { // If there is just one estimation, the magnitude is used as the logarithmic start point.
+            mag1 = sqrt(pow(p1.mainPoints[listInds[i][0]].x, 2) + pow(p1.mainPoints[listInds[i][0]].y, 2));
+            mag2 = sqrt(pow(p2.mainPoints[listInds[i][1]].x, 2) + pow(p2.mainPoints[listInds[i][1]].y, 2));
+            startPoint = static_cast<int>(abs(floor(log10(std::max(mag1, mag2)))));
+        }
+        for (int j = 0; j < 10; j++) {
+            sampleDist = 100;
+            for (int k = -10; k < 11; k++) {
+                for (int l = -10; l < 11; l++) {
+                    po1 = sub.prog1 + k / pow(10, j + startPoint);
+                    po2 = sub.prog2 + l / pow(10, j + startPoint);
+                    sp1 = p1(po1);
+                    sp2 = p2(po2);
+                    tDis = dist(sp1, sp2);
+                    if (tDis < sampleDist) {
+                        finalIndex[0] = k;
+                        finalIndex[1] = l;
+                        sampleDist = tDis;
+                    }
+                }
+            }
+            sub.prog1 += finalIndex[0] / pow(10, j + startPoint);
+            sub.prog2 += finalIndex[1] / pow(10, j + startPoint);
+        }
+        final.push_back(sub);
+    }
+    return final;
+};
+
+/*
+* rearrange - Takes a vector of para curves and returns a continuous set that makes up a prism starting from the first curve onward.
+*/
+std::vector<para> rearrange(std::vector<para> pl) {
+    for(int i=0;i<pl.size();i++)
+        pl[i].configure();
+    std::vector<para> final;
+    std::vector<int> inds = std::vector<int>({ 0 });
+    std::vector<bool> dirs = std::vector<bool>({ true });
+    bool closed = false;
+    int count = 1;
+    point ep = pl[0](1);
+    std::vector<int> rejected;
+    bool invalid = false;
+    if (pl.size() > 1) {
+        while (!closed && !invalid) { // Continues until prism is closed or its confirmed that no prism can be made.
+            if (!has(inds, count) && !has(rejected, count)) {
+                if (ep == pl[count](0)) {
+                    inds.push_back(count);
+                    dirs.push_back(true);
+                    count = 0;
+                }
+                else if (ep == pl[count](1)) {
+                    inds.push_back(count);
+                    dirs.push_back(false);
+                    count = 0;
+                }
+            }
+            count += 1;
+            ep = pl[inds[inds.size() - 1]](dirs[dirs.size() - 1]);
+            if (ep == pl[0](0))
+                closed = true;
+            if (count == pl.size() && !closed) {
+                rejected.push_back(inds[inds.size() - 1]);
+                inds.erase(inds.end() - 1);
+                dirs.erase(dirs.end() - 1);
+                count = 1;
+                if (!inds.size())
+                    invalid = true;
+            }
+        }
+    }
+    else
+        invalid = (pl[0].mainPoints[0] != pl[0].mainPoints[pl[0].mainPoints.size() - 1]);
+    if (invalid)
+        return std::vector<para>({});
+    else {
+        for (unsigned int i = 0; i < inds.size(); i++) {
+            if (dirs[i])
+                final.push_back(pl[inds[i]]);
+            else
+                final.push_back(pl[inds[i]].slice(1, 0));
+        }
+        return final;
+    }
+};
+
+/*
+* fsTypes - Different types of fillSquares used when filling in a prism.
+* FS_CHECK - Represents a square that hasn't been checked.
+* FS_OUT - Represents a square that has been confirmed outside the prism.
+* FS_IN - Represents a square that has been confirmed inside the prism.
+*/
+enum fsTypes {
+    FS_CHECK,
+    FS_OUT,
+    FS_IN,
+};
+
+/*
+* fillSquare - Represents an area used to fill in a prism.
+*/
+struct fillSquare {
+    point pos; // Position of the square.
+    int s = 0; // Size of the square.
+    std::vector<bool> c; // Represents each corner of the square, set to true if said corner lies within the prism.
+    fsTypes t = FS_CHECK;
+    fillSquare() {};
+    fillSquare(point p, int si, std::vector<bool> co, fsTypes ty) : pos(p), s(si), c(co), t(ty) {}
+    void print(){
+        pos.print();
+        std::cout << s << " " << int(t) << "\n";
+    }
+};
+
+/*
+* prism - Represents as enclosed area created by parametric curves.
+*/
+struct prism {
+    std::vector<para> sides;
+    int direction = 0;
+    double area = 0;
+    double perimeter = 0;
+    point center;
+    bounds limits = bounds(0, 0, 0, 0);
+    std::vector<fillSquare> squares;
+    prism() {};
+    prism(std::vector<para> s) : sides(rearrange(s)) {
+        if (sides.size()) { // Upon construction, the vector of parametric curves is checked to determine if the make an enclosure. If they cannot, an empty vector is returned and contstuction is skipped.
+            double direcInd = 0;
+            double jointAngle = 0;
+            limits = bounds(sides[0].mainPoints[0].x, sides[0].mainPoints[0].y, sides[0].mainPoints[0].x, sides[0].mainPoints[0].y);
+            for (unsigned int i = 0; i < sides.size(); i++) {
+                perimeter += sides[i].length;
+                double centX = 0;
+                double centY = 0;
+                for (unsigned int j = 0; j < sides[i].mainPoints.size() - 1; j++) { // Prism data is calculated using the cached data of its configured sides.
+                    limits.minX = std::min(limits.minX, sides[i].mainPoints[j].x);
+                    limits.minY = std::min(limits.minY, sides[i].mainPoints[j].y);
+                    limits.maxX = std::max(limits.maxX, sides[i].mainPoints[j].x);
+                    limits.maxY = std::max(limits.maxY, sides[i].mainPoints[j].y);
+                    point sp = midpoint(sides[i].mainPoints[j], sides[i].mainPoints[j + 1]);
+                    point dsp = midpoint(sides[i].derivPoints[j], sides[i].derivPoints[j + 1]);
+                    point ddsp = midpoint(sides[i].doubleDerivPoints[j], sides[i].doubleDerivPoints[j + 1]);
+                    double mag = sides[i].positions[j + 1] - sides[i].positions[j];
+                    if (pow(dsp.x, 2) + pow(dsp.y, 2) > 0)
+                        direcInd += (dsp.x * ddsp.y - dsp.y * ddsp.x) / (pow(dsp.x, 2) + pow(dsp.y, 2)) * mag; // Direction is calculated by finding the integral of the derivative of the arctangent of the quotient of the y derivative and z derivatives.
+                    area += (sp.x * dsp.y - sp.y * dsp.x) / 2 * mag; // Area is caculated using Green's Theorem. Found entirely by accident.
+                    centX += sp.x * mag; // Center is calcluated by the(estimated) integral of each side divided by the amount of sides.
+                    centY += sp.y * mag;
+                }
+                limits.minX = std::min(limits.minX, sides[i].mainPoints[sides[i].mainPoints.size() - 1].x);
+                limits.minY = std::min(limits.minY, sides[i].mainPoints[sides[i].mainPoints.size() - 1].y);
+                limits.maxX = std::max(limits.maxX, sides[i].mainPoints[sides[i].mainPoints.size() - 1].x);
+                limits.maxY = std::max(limits.maxY, sides[i].mainPoints[sides[i].mainPoints.size() - 1].y);
+                center.x += centX / sides.size();
+                center.y += centY / sides.size();
+                if (i < sides.size() - 1) {
+                    jointAngle = (sides[i + 1].startAn - sides[i].endAn); // At any corner of the prism, the change in angle is accounted for and added to the final directional indicator.
+                    if (abs(sides[i + 1].startAn - sides[i].endAn) == pi/2) {
+                        if (sides[i + 1](0.000001).deriveAngle() - sides[i](0.999999).deriveAngle() > 0)
+                            jointAngle = pi;
+                        else
+                            jointAngle = -pi;
+                    }
+                    if (jointAngle > pi)
+                        jointAngle -= (2 * pi);
+                    else if (jointAngle < -pi)
+                        jointAngle += (2 * pi);
+                    direcInd += jointAngle;
+                }
+            }
+            jointAngle = (sides[0].startAn - sides[sides.size() - 1].endAn);
+            if (abs(sides[0].startAn - sides[sides.size() - 1].endAn) == pi/2) {
+                if (sides[0](0.000001).deriveAngle() - sides[sides.size() - 1](0.999999).deriveAngle() > 0)
+                    jointAngle = pi;
+                else
+                    jointAngle = -pi;
+            }
+            if (jointAngle > pi)
+                jointAngle -= (2 * pi);
+            else if (jointAngle < -pi)
+                jointAngle += (2 * pi);
+            direcInd += jointAngle;
+            direction = round(direcInd / (2 * pi)); // If a prism has a counter-clockwise direction(positive), the directional indicator would be evaluated to about 2*pi. Negative 2*pi if clockwise.
+            area = abs(area);
+        }
+    }
+    void print() {
+        std::cout << "Center: ";
+        center.print();
+        std::cout << "Bounds: ";
+        limits.print();
+        std::cout << "Direction: " << ((direction == 1) ? "Counter-clockwise(positive)" : "Clockwise(negative)") << "\nPerimeter: " << perimeter << "\nArea: " << area;
+    }
+
+    // inside - Takes a point and returns true if it lies within the prism. ins is used to reverse the output.
+    bool inside(point p, bool ins) {
+        double final = 0;
+        double lDist = 100;
+        for (int i = 0; i < sides.size(); i++) {
+            double sDist = sides[i].findClosest(p)[1];
+            lDist = std::min(lDist, sDist); 
+            for (unsigned int j = 0; j < sides[i].mainPoints.size() - 1; j++) {
+                point sp = midpoint(sides[i].mainPoints[j], sides[i].mainPoints[j + 1]);
+                sp.x -= p.x; // Before calculating the integral, the prism is translated by the test point.
+                sp.y -= p.y;
+                point dsp = midpoint(sides[i].derivPoints[j], sides[i].derivPoints[j + 1]);
+                double mag = sides[i].positions[j + 1] - sides[i].positions[j];
+                if (pow(sp.x, 2) + pow(sp.y, 2) > 0)
+                    final += (sp.x * dsp.y - sp.y * dsp.x) / (pow(sp.x, 2) + pow(sp.y, 2)) * mag;
+            }
+        }
+        final = round(final / (2 * pi)) * direction;
+        if (lDist < pow(10, -6)) // Special case where the test point is neglibigly close to a cached point. Returns true regardless of the ins bool.
+            return true;
+        return ((ins && final >= 1) || (!ins && final <= 0)); // Upon integration, the result will return 2*pi if the point is in the prism and 0 if the point is out.
+    };
+
+    // checkBlock - Takes a fillSquare and checks the points inside of it to confirm if they are in the prism. Returns an array of fillSquares if the inital fillSquare size is greater than 1.
+    std::vector<fillSquare> checkBlock(fillSquare b) {
+        std::vector<fillSquare> final;
+        if (b.s > 1) {
+            // As long as the inital fillSquare size is greater than 1, an array of 4 fillSquares will be returned, each with a size half of the original.
+            std::vector<bool> allPoints = std::vector<bool>({ b.c[0],inside(point(b.pos.x - b.s / 2,b.pos.y), true),b.c[1],inside(point(b.pos.x,b.pos.y - b.s / 2), true),inside(b.pos, true),inside(point(b.pos.x,b.pos.y + b.s / 2),true),b.c[2],inside(point(b.pos.x + b.s / 2,b.pos.y), true),b.c[3] });
+            for (int i = 0; i < 4; i++) {
+                fsTypes sub = FS_CHECK;
+                if ((allPoints[i % 2 + floor(i / 2) * 3] and allPoints[(i % 2 + floor(i / 2) * 3) + 1] and allPoints[(i % 2 + floor(i / 2) * 3) + 3] and allPoints[(i % 2 + floor(i / 2) * 3) + 4]) or (!allPoints[i % 2 + floor(i / 2) * 3] and !allPoints[(i % 2 + floor(i / 2) * 3) + 1] and !allPoints[(i % 2 + floor(i / 2) * 3) + 3] and !allPoints[(i % 2 + floor(i / 2) * 3) + 4])) {
+                    para sub2; // For each potential fillSquare, each side of it is checked agaisnt the sides of the prism for any intersections.
+                               // If there are no intersections, the square can either be fully in the prism or fully out.
+                    sub2.mainPoints = std::vector<point>({ point(b.pos.x - b.s / 2 + int(i / 2) * b.s / 2,b.pos.y - b.s / 2 + (i % 2) * b.s / 2),point(b.pos.x - b.s / 2 + int(i / 2) * b.s / 2,b.pos.y + (i % 2) * b.s / 2),point(b.pos.x + int(i / 2) * b.s / 2,b.pos.y + (i % 2) * b.s / 2),point(b.pos.x + int(i / 2) * b.s / 2,b.pos.y + (i % 2) * b.s / 2 - b.s / 2),point(b.pos.x - b.s / 2 + int(i / 2) * b.s / 2,b.pos.y - b.s / 2 + (i % 2) * b.s / 2) });
+                    sub2.positions = std::vector<double>({0,0,0,0,0});
+                    sub2.configured = true;
+                    int j = 0;
+                    std::vector<intersection> sub3;
+                    while(j < sides.size() and !sub3.size()) {
+                        sub3 = findInters(sides[j], sub2);
+                        j++;
+                    }
+                    if (!sub3.size()) {
+                        if (allPoints[i % 2 + floor(i / 2) * 3])
+                            sub = FS_IN;
+                        else
+                            sub = FS_OUT;
+                    }
+                }
+                final.push_back(fillSquare(point(b.pos.x + (floor((i % 2 + floor(i / 2) * 3) / 3) - 1) * b.s / 2 + b.s / 4, b.pos.y + (int(i % 2 + floor(i / 2) * 3) % 3 - 1) * b.s / 2 + b.s / 4), b.s / 2, std::vector<bool>({ allPoints[i % 2 + floor(i / 2) * 3], allPoints[(i % 2 + floor(i / 2) * 3) + 1], allPoints[(i % 2 + floor(i / 2) * 3) + 3], allPoints[(i % 2 + floor(i / 2) * 3) + 4] }), sub));
+            }
+        }
+        else{
+            if(inside(b.pos,true))
+                final.push_back(fillSquare(b.pos,1,std::vector<bool>({0,0,0,0}),FS_IN));
+        }
+        return final;
+    }
+
+    // fill - Fills in a prism using fillSquares.
+    void fill() {
+        squares.clear();
+        double startSize = pow(2, floor(log(std::min(limits.maxX - limits.minX, limits.maxY - limits.minY)) / log(2))); // Using the prism bounds, a startSize powrer of 2 is derived.
+        bounds roundBounds = bounds(floor(limits.minX / startSize) * startSize, floor(limits.minY / startSize) * startSize, ceil(limits.maxX / startSize) * startSize, ceil(limits.maxY / startSize) * startSize);
+        std::vector<std::vector<bool>> points;
+        std::vector<fillSquare> tBlocks;
+        for (int i = 0; i <= (roundBounds.maxX - roundBounds.minX) / startSize; i++) {
+            points.push_back(std::vector<bool>({}));
+            for (int j = 0; j <= (roundBounds.maxY - roundBounds.minY) / startSize; j++) {
+                points[i].push_back(inside(point(i * startSize + roundBounds.minX, j * startSize + roundBounds.minY), true));
+                if (i && j)
+                    tBlocks.push_back(fillSquare(point((i - 0.5) * startSize + roundBounds.minX, (j - 0.5) * startSize + roundBounds.minY), startSize, std::vector<bool>({ points[i - 1][j - 1], points[i - 1][j], points[i][j - 1], points[i][j] }), FS_CHECK)); // Array of test blocks starts off using the maximum size.
+            }
+        }
+        while (tBlocks.size()) { // Until every block has been checked, new blocks are added to the array using checkBlock.
+            if (tBlocks[0].t == FS_CHECK) {
+                std::vector<fillSquare> nb = checkBlock(tBlocks[0]);
+                for (int j = 0; j < nb.size(); j++)
+                    tBlocks.push_back(nb[j]);
+            }
+            else if (tBlocks[0].t == FS_IN) // If a checked block is confirmed inside, its added to the final array of fillSquares.
+                squares.push_back(tBlocks[0]);
+            tBlocks.erase(tBlocks.begin(), tBlocks.begin() + 1); // First block in the array is always taken out and continues until its empty.
+        }
+    }
+};
+
+/*
+* pointSlopeWarp(single) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points.
+*/
+std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point offset, bounds limits){
+    expr sx = (c.x+offset.x)/scope.x;
+    expr sy = (c.y+offset.y)/scope.y;
+    para dx = bx.derive();
+    para dy = by.derive();
+    para cx = para(comp(bx.x, sx),comp(bx.y, sx));
+    para cy = para(comp(by.x, sy),comp(by.y, sy));
+    para dcx = para(comp(dx.x, sx),comp(dx.y, sx));
+    para dcy = para(comp(dy.x, sy),comp(dy.y, sy));
+
+    expr diffX1 = dcx.x+dcx.y;
+    expr diffX2 = dcx.x-dcx.y;
+    diffX1.analyze();
+    diffX2.analyze();
+    
+    expr diffY1 = dcy.x+dcy.y;
+    expr diffY2 = dcy.x-dcy.y;
+    diffY1.analyze();
+    diffY2.analyze();
+
+    std::vector<double> allSwitch;
+    for(int i=0;i<diffX1.zeros.size();i++)
+        allSwitch.push_back(diffX1.zeros[i]);
+    for(int i=0;i<diffX2.zeros.size();i++)
+        allSwitch.push_back(diffX2.zeros[i]);
+    for(int i=0;i<diffY1.zeros.size();i++)
+        allSwitch.push_back(diffY1.zeros[i]);
+    for(int i=0;i<diffY2.zeros.size();i++)
+        allSwitch.push_back(diffY2.zeros[i]);
+    std::vector<double> sortSwitch = std::vector<double>({0});
+    int lowestInd=0;
+    double lowestVal=0;
+    int count=0;
+    if(allSwitch.size()){
+        lowestVal=allSwitch[0];
+        while(allSwitch.size()){
+            if(allSwitch[count] < lowestVal){
+                lowestVal = allSwitch[count];
+                lowestInd = count;
+            }
+            count++;
+            if(count == allSwitch.size()){
+                sortSwitch.push_back(lowestVal);
+                allSwitch.erase(allSwitch.begin()+lowestInd,allSwitch.begin()+lowestInd+1);
+                count = 0;
+                if(allSwitch.size()){
+                    lowestInd=0;
+                    lowestVal=allSwitch[0];
+                }
+            }
+        }
+    }
+    sortSwitch.push_back(1);
+    point tpX;
+    point tpY;
+    expr mX;
+    expr bX;
+    expr mY;
+    expr bY;
+    std::vector<para> rawCurves;
+    for(int i=0;i<sortSwitch.size()-1;i++){
+        tpX=cx((sortSwitch[i]+sortSwitch[i+1])/2);
+        tpY=cy((sortSwitch[i]+sortSwitch[i+1])/2);
+        if(abs(tpX.x) > abs(tpX.y)){
+            mX = dcx.y/dcx.x;
+            bX = cx.y-(cx.x*mX);
+        }
+        else{
+            mX = dcx.x/dcx.y;
+            bX = cx.x-(cx.y*mX);
+        }
+        if(abs(tpY.x) > abs(tpY.y)){
+            mY = dcy.y/dcy.x;
+            bY = cy.y-(cy.x*mY);
+        }
+        else{
+            mY = dcy.x/dcy.y;
+            bY = cy.x-(cy.y*mY);
+        }
+        para test;
+        if((abs(tpX.x) > abs(tpX.y)) == (abs(tpY.x) > abs(tpY.y))){
+            if(abs(tpX.x) > abs(tpY.y))
+                test = para((bY-bX)/(mX-mY),(bY*mX-mY*bX)/(mX-mY));
+            else
+                test = para((mX*bY-bX*mY)/(mX-mY),(bY-bX)/(mX-mY));
+        }
+        else{
+            if(abs(tpX.x) > abs(tpY.y))
+                test = para((bY+mY*bX)/(expr(1)-mX*mY),(bX+mX*bY)/(expr(1)-mX*mY));
+            else
+                test = para((bX+mX*bY)/(expr(1)-mX*mY),(bY+mY*bX)/(expr(1)-mX*mY));
+        }
+        rawCurves.push_back(test.slice(sortSwitch[i],sortSwitch[i+1]));
+    }
+    point tp;
+    std::vector<para> final;
+    for(int i=0;i<rawCurves.size();i++){
+        rawCurves[i].x.analyze();
+        rawCurves[i].y.analyze();
+        std::vector<double> prospSplit;
+        expr testX1 = rawCurves[i].x-limits.minX;
+        testX1.analyze();
+        for(int j=0;j<testX1.zeros.size();j++){
+            tp = rawCurves[i](testX1.zeros[j]);
+            if(tp.y >= limits.minY && tp.y <= limits.maxY)
+                prospSplit.push_back(testX1.zeros[j]);
+        }
+
+        expr testX2 = rawCurves[i].x-limits.maxX;
+        testX2.analyze();
+        for(int j=0;j<testX2.zeros.size();j++){
+            tp = rawCurves[i](testX2.zeros[j]);
+            if(tp.y >= limits.minY && tp.y <= limits.maxY)
+                prospSplit.push_back(testX2.zeros[j]);
+        }
+
+        expr testY1 = rawCurves[i].y-limits.minY;
+        testY1.analyze();
+        for(int j=0;j<testY1.zeros.size();j++){
+            tp = rawCurves[i](testY1.zeros[j]);
+            if(tp.x >= limits.minX && tp.x <= limits.maxX)
+                prospSplit.push_back(testY1.zeros[j]);
+        }
+
+        expr testY2 = rawCurves[i].y-limits.maxY;
+        testY2.analyze();
+        for(int j=0;j<testY2.zeros.size();j++){
+            tp = rawCurves[i](testY2.zeros[j]);
+            if(tp.x >= limits.minX && tp.x <= limits.maxX)
+                prospSplit.push_back(testY2.zeros[j]);
+        }
+        std::vector<double> sortSplit = std::vector<double>({0});
+        int lowestInd=0;
+        double lowestVal=0;
+        if(prospSplit.size())
+            lowestVal = prospSplit[0];
+        int count=0;
+        while(prospSplit.size()){
+            if(prospSplit[count] < lowestVal){
+                lowestVal = prospSplit[count];
+                lowestInd = count;
+            }
+            count++;
+            if(count == prospSplit.size()){
+                sortSplit.push_back(lowestVal);
+                prospSplit.erase(prospSplit.begin()+lowestInd,prospSplit.begin()+lowestInd+1);
+                count = 0;
+                if(prospSplit.size()){
+                    lowestInd=0;
+                    lowestVal = prospSplit[0];
+                }
+            }
+        }
+        sortSplit.push_back(1);
+        for(int j=0;j<sortSplit.size()-1;j++){
+            if(limits.within(rawCurves[i]((sortSplit[j]+sortSplit[j+1])/2)))
+                final.push_back(rawCurves[i].slice(sortSplit[j],sortSplit[j+1]));
+        }
+    }
+    return final;
+}
+
+/*
+* pointSlopeWarp(multi) - Takes a vector of sample curves and warps them using the tangent lines of two base parametric curves at specific points.
+*/
+std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point scope, point offset, bounds limits){
+    std::vector<para> final;
+    for(int i=0;i<l.size();i++){
+        std::vector<para> sub = pointSlopeWarp(bx, by, l[i], scope, offset, limits);
+        for(int j=0;j<sub.size();j++)
+            final.push_back(sub[j]);
+    }
+    return final;
+}
+
+/*
+* circPoints - Takes a vector of points and connects them using arcs.
+*/
+std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
+    double ca=an;
+    std::vector<para> final;
+    for(int i=0;i<pl.size()-1;i++){
+        point p1=pl[i];
+        point p2=pl[i+1];
+        double o=(pi-angleVector(p1,p2)+ca);
+        while(o<0||o>2*pi){
+            if(o<0){o+=2*pi;}
+            if(o>2*pi){o-=2*pi;}
+        }
+        point cent = point((p1.x+p2.x+(p2.y-p1.y)*cos(o)/sin(o))/2,(p1.y+p2.y+(p1.x-p2.x)*cos(o)/sin(o))/2);
+        double rad = sqrt(pow(p1.x-p2.x,2)+pow(p2.y-p1.y,2))/(abs(sin(o))*2);
+        double degOff=atan((p2.y-p1.y-(p2.x-p1.x)*cos(o)/sin(o))/(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))*180/pi+90*((p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o))/abs(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))+90;
+        double degAmt=2*(pi-o)*180/pi;
+        std::vector<double> splits = std::vector<double>({0});
+        if((limits.minX-cent.x)/rad >= -1 and (limits.minX-cent.x)/rad <= 1){
+            if((acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
+                splits.push_back((acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt);
+            if(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
+                splits.push_back(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        }
+        if((limits.maxX-cent.x)/rad >= -1 and (limits.maxX-cent.x)/rad <= 1){
+            if((acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
+                splits.push_back((acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt);
+            if(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
+                splits.push_back(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        }
+        if((limits.minY-cent.x)/rad >= -1 and (limits.minY-cent.x)/rad <= 1){
+            if((asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
+                splits.push_back((asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt);
+            if(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
+                splits.push_back(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        }
+        if((limits.maxY-cent.x)/rad >= -1 and (limits.maxY-cent.x)/rad <= 1){
+            if((asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
+                splits.push_back((asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt);
+            if(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
+                splits.push_back(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        }
+        splits.push_back(1);
+        std::vector<double> sortSplit;
+        int lowestInd=0;
+        double lowestVal=splits[0];
+        int count=0;
+        while(splits.size()){
+            if(splits[count] < lowestVal){
+                lowestInd = count;
+                lowestVal = splits[count];
+            }
+            count++;
+            if(count == splits.size()){
+                sortSplit.push_back(lowestVal);
+                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
+                count = 0;
+                if(splits.size()){
+                    lowestInd=0;
+                    lowestVal=splits[0];
+                }
+            }
+        }
+        para test = sinusoid(cent,rad,rad,degOff,degAmt);
+        for(int j=0;j<sortSplit.size()-1;j++){
+            if(limits.within(test((sortSplit[j]+sortSplit[j+1])/2)))
+                final.push_back(test.slice(sortSplit[j],sortSplit[j+1]));
+        }
+        ca=2*angleVector(p1,p2)-ca;
+        if(ca<0){ca+=2*pi;}
+        if(ca>2*pi){ca-=2*pi;}
+    }
+    return final;
+};
