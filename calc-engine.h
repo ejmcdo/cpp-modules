@@ -1894,8 +1894,54 @@ struct para {
             final = final.transform(sequence[i]);
         return final;
     }
+
+    // pointSet - Prints out a list of points based on factor f. If f is greater than 0, then the curve will return points in steps of 1/f. If f is equal to 0, the curve will return all cached points obtained during configuration.
+    void pointSet(double f){
+        std::cout << "[";
+        if(f){
+            for(int i=0;i<f+1;i++){
+                point p=(*this)(double(i)/f);
+                std::cout << "[" << p.x << "," << p.y << "]";
+                if(i<f)
+                    std::cout << ",";
+            }
+        }
+        else{
+            for(int i=0;i<mainPoints.size();i++){
+                std::cout << "[" << mainPoints[i].x << "," << mainPoints[i].y << "]";
+                if(i<mainPoints.size()-1)
+                    std::cout << ",";
+            }
+        }
+        std::cout << "];";
+    }
 };
 
+void pointSet(std::vector<para> p, double f){
+    std::cout << "[";
+    for(int j=0;j<p.size();j++){
+        std::cout << "[";
+        if(f){
+            for(int i=0;i<f+1;i++){
+                point po=p[j](double(i)/f);
+                std::cout << "[" << po.x << "," << po.y << "]";
+                if(i<f)
+                    std::cout << ",";
+            }
+        }
+        else{
+            for(int i=0;i<p[j].mainPoints.size();i++){
+                std::cout << "[" << p[j].mainPoints[i].x << "," << p[j].mainPoints[i].y << "]";
+                if(i<p[j].mainPoints.size()-1)
+                    std::cout << ",";
+            }
+        }
+        std::cout << "]";
+        if(j<p.size()-1)
+            std::cout << ",";
+    }
+    std::cout << "];";
+}
 /*
 * angleVector - Returns the angle vector created from points p1 and p2.
 */
@@ -2463,7 +2509,7 @@ struct prism {
 };
 
 /*
-* pointSlopeWarp(single) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points.
+* pointSlopeWarp(single/bounds) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the bounds limits.
 */
 std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point offset, bounds limits){
     expr sx = (c.x+offset.x)/scope.x;
@@ -2557,6 +2603,10 @@ std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point of
             else
                 test = para((bX+mX*bY)/(expr(1)-mX*mY),(bY+mY*bX)/(expr(1)-mX*mY));
         }
+        if(abs(tpY.x) < abs(tpY.y)){
+            para test2 = para(test.y,test.x);
+            test = test2;
+        }
         rawCurves.push_back(test.slice(sortSwitch[i],sortSwitch[i+1]));
     }
     point tp;
@@ -2628,7 +2678,7 @@ std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point of
 }
 
 /*
-* pointSlopeWarp(multi) - Takes a vector of sample curves and warps them using the tangent lines of two base parametric curves at specific points.
+* pointSlopeWarp(multi/bounds) - Takes a vector of sample curves and warps them using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the bounds limits.
 */
 std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point scope, point offset, bounds limits){
     std::vector<para> final;
@@ -2641,7 +2691,7 @@ std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point sc
 }
 
 /*
-* circPoints - Takes a vector of points and connects them using arcs.
+* circPoints(bounds) - Takes a vector of points and connects them using arcs. Result includes any curves that lie within the bounds limits.
 */
 std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
     double ca=an;
@@ -2658,30 +2708,55 @@ std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
         double rad = sqrt(pow(p1.x-p2.x,2)+pow(p2.y-p1.y,2))/(abs(sin(o))*2);
         double degOff=atan((p2.y-p1.y-(p2.x-p1.x)*cos(o)/sin(o))/(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))*180/pi+90*((p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o))/abs(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))+90;
         double degAmt=2*(pi-o)*180/pi;
+        double step = 360/degAmt;
         std::vector<double> splits = std::vector<double>({0});
         if((limits.minX-cent.x)/rad >= -1 and (limits.minX-cent.x)/rad <= 1){
-            if((acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
-                splits.push_back((acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt);
-            if(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
-                splits.push_back(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+            double sampleDeg1=(acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg1/step) == floor((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+ceil(-sampleDeg1/step)*step);
+            if((step < 0 && (floor(-sampleDeg1/step) == ceil((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+floor(-sampleDeg1/step)*step);
+            double sampleDeg2=((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg2/step) == floor((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+ceil(-sampleDeg2/step)*step);
+            if((step < 0 && (floor(-sampleDeg2/step) == ceil((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+floor(-sampleDeg2/step)*step);
         }
         if((limits.maxX-cent.x)/rad >= -1 and (limits.maxX-cent.x)/rad <= 1){
-            if((acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
-                splits.push_back((acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt);
-            if(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
-                splits.push_back(((2*pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+            double sampleDeg1=(acos((limits.maxX-cent.x)/rad)*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg1/step) == floor((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+ceil(-sampleDeg1/step)*step);
+            if((step < 0 && (floor(-sampleDeg1/step) == ceil((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+floor(-sampleDeg1/step)*step);
+            double sampleDeg2=((2*pi-acos((limits.maxX-cent.x)/rad))*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg2/step) == floor((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+ceil(-sampleDeg2/step)*step);
+            if((step < 0 && (floor(-sampleDeg2/step) == ceil((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+floor(-sampleDeg2/step)*step);
         }
-        if((limits.minY-cent.x)/rad >= -1 and (limits.minY-cent.x)/rad <= 1){
-            if((asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
-                splits.push_back((asin((limits.minY-cent.x)/rad)*180/pi-degOff)/degAmt);
-            if(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
-                splits.push_back(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        if((limits.minY-cent.y)/rad >= -1 and (limits.minY-cent.y)/rad <= 1){
+            double sampleDeg1=(asin((limits.minY-cent.y)/rad)*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg1/step) == floor((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+ceil(-sampleDeg1/step)*step);
+            if((step < 0 && (floor(-sampleDeg1/step) == ceil((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+floor(-sampleDeg1/step)*step);
+            double sampleDeg2=((pi-asin((limits.minY-cent.y)/rad))*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg2/step) == floor((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+ceil(-sampleDeg2/step)*step);
+            if((step < 0 && (floor(-sampleDeg2/step) == ceil((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+floor(-sampleDeg2/step)*step);
         }
-        if((limits.maxY-cent.x)/rad >= -1 and (limits.maxY-cent.x)/rad <= 1){
-            if((asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt >= 0 && (asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt <= 1)
-                splits.push_back((asin((limits.maxY-cent.x)/rad)*180/pi-degOff)/degAmt);
-            if(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt >= 0 && ((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt <= 1)
-                splits.push_back(((pi-acos((limits.minX-cent.x)/rad))*180/pi-degOff)/degAmt);
+        if((limits.maxY-cent.y)/rad >= -1 and (limits.maxY-cent.y)/rad <= 1){
+            double sampleDeg1=(asin((limits.maxY-cent.y)/rad)*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg1/step) == floor((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+ceil(-sampleDeg1/step)*step);
+            if((step < 0 && (floor(-sampleDeg1/step) == ceil((1-sampleDeg1)/step))))
+                splits.push_back(sampleDeg1+floor(-sampleDeg1/step)*step);
+            double sampleDeg2=((pi-asin((limits.maxY-cent.y)/rad))*180/pi-degOff)/degAmt;
+            if((step > 0 && (ceil(-sampleDeg2/step) == floor((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+ceil(-sampleDeg2/step)*step);
+            if((step < 0 && (floor(-sampleDeg2/step) == ceil((1-sampleDeg2)/step))))
+                splits.push_back(sampleDeg2+floor(-sampleDeg2/step)*step);
         }
         splits.push_back(1);
         std::vector<double> sortSplit;
@@ -2715,3 +2790,106 @@ std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
     }
     return final;
 };
+
+/*
+* pointSlopeWarp(standard/prism) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the prism limits.
+*/
+std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point offset, prism limits){
+    std::vector<para> sub = pointSlopeWarp(bx, by, c, scope, offset, limits.limits);
+    std::vector<para> final;
+    for(int i=0;i<sub.size();i++){
+        std::vector<double> splits;
+        for(int j=0;j<limits.sides.size();j++){
+            std::vector<intersection> sub2 = findInters(sub[i],limits.sides[j]);
+            for(int k=0;k<sub2.size();k++)
+                splits.push_back(sub2[k].prog1);
+        }
+        std::vector<double> sortSplits = std::vector<double>({0});
+        int count=0;
+        double lowestInd=0;
+        double lowestVal=0;
+        if(splits.size())
+            lowestVal = splits[0];
+        while(splits.size()){
+            if(splits[count] < lowestVal){
+                lowestInd=count;
+                lowestVal=splits[count];
+            }
+            count++;
+            if(count == splits.size()){
+                sortSplits.push_back(splits[lowestInd]);
+                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
+                if(splits.size()){
+                    count=0;
+                    lowestInd=0;
+                    lowestVal=splits[0];
+                }
+            }
+        }
+        sortSplits.push_back(1);
+        for(int j=0;j<sortSplits.size()-1;j++){
+            point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2);
+            if(limits.inside(sub3, true))
+                final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
+        }
+    }
+    return final;
+}
+
+/*
+* pointSlopeWarp(multi/prism) - Takes a vector of sample curves and warps them using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the prism limits.
+*/
+std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point scope, point offset, prism limits){
+    std::vector<para> final;
+    for(int i=0;i<l.size();i++){
+        std::vector<para> sub = pointSlopeWarp(bx, by, l[i], scope, offset, limits);
+        for(int j=0;j<sub.size();j++)
+            final.push_back(sub[j]);
+    }
+    return final;
+}
+
+/*
+* circPoints(prism) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the prism limits.
+*/
+std::vector<para> circPoints(std::vector<point> pl, double an, prism limits){
+    std::vector<para> sub = circPoints(pl, an, limits.limits);
+    std::vector<para> final;
+    for(int i=0;i<sub.size();i++){
+        std::vector<double> splits;
+        for(int j=0;j<limits.sides.size();j++){
+            std::vector<intersection> sub2 = findInters(sub[i],limits.sides[j]);
+            for(int k=0;k<sub2.size();k++)
+                splits.push_back(sub2[k].prog1);
+        }
+        std::vector<double> sortSplits = std::vector<double>({0});
+        int count=0;
+        double lowestInd=0;
+        double lowestVal=0;
+        if(splits.size())
+            lowestVal = splits[0];
+        while(splits.size()){
+            if(splits[count] < lowestVal){
+                lowestInd=count;
+                lowestVal=splits[count];
+            }
+            count++;
+            if(count == splits.size()){
+                sortSplits.push_back(splits[lowestInd]);
+                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
+                if(splits.size()){
+                    count=0;
+                    lowestInd=0;
+                    lowestVal=splits[0];
+                }
+            }
+        }
+        sortSplits.push_back(1);
+        for(int j=0;j<sortSplits.size()-1;j++){
+            point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2);
+            if(limits.inside(sub3, true))
+                final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
+        }
+    }
+    return final;
+}
