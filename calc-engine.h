@@ -6,7 +6,7 @@
 #include <vector>
 #include <math.h>
 #include <string>
-#include <strConv.h>
+#include <string-handle.h>
 
 // Pi. Because why not?
 const double pi = 3.1415926535897932384626433832795;

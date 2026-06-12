@@ -2,6 +2,7 @@
 * Simple zlib compression/decompression module that I finally got to work after some 20+ hours of bugfixing.
 * I've been spoiled by Python. Credit to the original creators or something.
 */
+#pragma once
 #include <string>
 #include <math.h>
 
@@ -20,10 +21,16 @@
 #include <zlib/zutil.h>
 #include <zlib/zutil.c>
 
+// compTypes - There are only two methods of compression that I use often, one for .png images, and another for Geometry Dash save files(yes, I play that game).
+enum compTypes{
+    PNG,
+    GD
+};
+
 /*
-* zlibComp - Takes a string and compresses it using zlib. Uses all default settings and will probably stay that way forever. Sorry not sorry.
+* zlibComp - Takes a string and compresses it using zlib. Type(either .png or gd save file) is specified.
 */
-std::string zlibComp(std::string x) {
+std::string zlibComp(std::string x, compTypes type) {
     Bytef* source = new unsigned char[x.size()];
     for (unsigned int i = 0; i < x.size(); i++) {
         *(source + i) = x[i];
@@ -35,7 +42,10 @@ std::string zlibComp(std::string x) {
     while (compTest != 0) {
         destSize = compressBound(uLong(x.size())) + boundOff;
         dest = new unsigned char[destSize];
-        compTest = compress(dest, &destSize, source, uLong(x.size()));
+        if(type == PNG)
+            compTest = compress(dest, &destSize, source, uLong(x.size()), int(type));
+        if(type == GD)
+            compTest = compress2(dest, &destSize, source, uLong(x.size()), 9, int(type));
         boundOff++;
     }
     std::string final;
@@ -46,25 +56,29 @@ std::string zlibComp(std::string x) {
 }
 
 /*
-* zlibComp - Takes a compressed string and decompresses it using zlib. Uses all default settings and will also probably stay that way forever.
+* zlibComp - Takes a compressed string and decompresses it using zlib. Type(either .png or gd save file) is specified.
 */
-std::string zlibUncomp(std::string x) {
+std::string zlibUncomp(std::string x, compTypes type) {
     Bytef* source = new unsigned char[x.size()];
     uLongf destLen = 0;
     int compTest = -1;
     int boundOff = 0;
     Bytef* dest = new unsigned char[destLen];
+    int datMin = 0;
+    int datMax = 0;
+    if(type == GD){
+        datMin = 10;
+        datMax = 8;
+    }
     while (compTest < 0) {
         for (unsigned int i = 0; i < (x.size() - boundOff); i++) {
-            if (i >= 0 and i <= (x.size() - boundOff))
-                *(source + (i - 0)) = x[i];
-            if (i >= (x.size() - boundOff) - 4){
-                unsigned char s=x[i];
-                destLen += int(s) * int(pow(256, i - (x.size() - boundOff) + 4));
-            }
+            if (i >= datMin && i <= (x.size() - boundOff) - datMax)
+                *(source + (i - datMin)) = x[i];
+            if (i >= (x.size() - boundOff) - 4)
+                destLen += int(static_cast<unsigned char>(x[i])) * int(pow(256, i - (x.size() - boundOff) + 4));
         }
         dest = new unsigned char[destLen];
-        compTest = uncompress(dest, &destLen, source, uLong((x.size() - boundOff)));
+        compTest = uncompress(dest, &destLen, source, uLong((x.size() - boundOff) - (datMin + datMax)), int(type));
         boundOff++;
     }
     std::string final;

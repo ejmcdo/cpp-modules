@@ -22,7 +22,7 @@
      The _z versions of the functions take size_t length arguments.
 */
 int ZEXPORT compress2_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
-                        z_size_t sourceLen, int level) {
+                        z_size_t sourceLen, int level, int type) {
     z_stream stream;
     int err;
     const uInt max = (uInt)-1;
@@ -39,7 +39,10 @@ int ZEXPORT compress2_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
     stream.zfree = (free_func)0;
     stream.opaque = (voidpf)0;
 
-    err = deflateInit(&stream, level);
+    if(type == 0)
+        err = deflateInit(&stream, level); // for png
+    else if(type == 1)
+        err = deflateInit2(&stream, level, Z_DEFLATED, 31, 8, Z_DEFAULT_STRATEGY); // for gd
     if (err != Z_OK) return err;
 
     stream.next_out = dest;
@@ -65,23 +68,23 @@ int ZEXPORT compress2_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
     return err == Z_STREAM_END ? Z_OK : err;
 }
 int ZEXPORT compress2(Bytef *dest, uLongf *destLen, const Bytef *source,
-                      uLong sourceLen, int level) {
+                      uLong sourceLen, int level, int type) {
     int ret;
     z_size_t got = *destLen;
-    ret = compress2_z(dest, &got, source, sourceLen, level);
+    ret = compress2_z(dest, &got, source, sourceLen, level, type);
     *destLen = (uLong)got;
     return ret;
 }
 /* ===========================================================================
  */
 int ZEXPORT compress_z(Bytef *dest, z_size_t *destLen, const Bytef *source,
-                       z_size_t sourceLen) {
+                       z_size_t sourceLen, int type) {
     return compress2_z(dest, destLen, source, sourceLen,
-                       Z_DEFAULT_COMPRESSION);
+                       Z_DEFAULT_COMPRESSION, type);
 }
 int ZEXPORT compress(Bytef *dest, uLongf *destLen, const Bytef *source,
-                     uLong sourceLen) {
-    return compress2(dest, destLen, source, sourceLen, Z_DEFAULT_COMPRESSION);
+                     uLong sourceLen, int type) {
+    return compress2(dest, destLen, source, sourceLen, Z_DEFAULT_COMPRESSION, type);
 }
 
 /* ===========================================================================

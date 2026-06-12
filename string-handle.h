@@ -1,7 +1,14 @@
+/*
+* Module used to make operations with plain-text string files easier.
+*/
 #pragma once
 #include <string>
 #include <math.h>
+
+// The amount of decimal digits used when converting doubles to strings.
 int decAcc = 3;
+
+// doub2Str - Converts a double to a string.
 std::string doub2Str(double y) {
     if (!y)
         return "0";
@@ -43,6 +50,8 @@ std::string doub2Str(double y) {
     }
     return realFinal;
 }
+
+// int2Str - Converts an integer to a string.
 std::string int2Str(int y) {
     if (!y)
         return "0";
@@ -62,6 +71,8 @@ std::string int2Str(int y) {
     }
     return final;
 }
+
+// str2Int - Convert a string to an integer.
 int str2Int(std::string x) {
     int final = 0;
     if (x.size()) {
@@ -73,6 +84,8 @@ int str2Int(std::string x) {
     }
     return final;
 }
+
+// str2Doub - Converts a string to a double.
 double str2Doub(std::string x) {
     double final = 0;
     int dpp = -1;
@@ -96,6 +109,8 @@ double str2Doub(std::string x) {
     }
     return final;
 }
+
+// intConvStr - Converts an integer to a raw string.
 std::string intConvStr(int v, int n) {
     std::string final;
     for (int j = 0; j < n; j++)

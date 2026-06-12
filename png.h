@@ -75,7 +75,7 @@ std::vector<std::vector<pixel>> matrix(std::string fn){
         for(int j=0;j<blocks[datBlockIndices[i]].size();j++)
             allData += (blocks[datBlockIndices[i]][j]);
     }
-    std::string decompressedData = zlibUncomp(allData);
+    std::string decompressedData = zlibUncomp(allData, PNG);
     std::vector<std::vector<std::vector<unsigned char>>> pixelMat;
     std::vector<filter> filters;
     for(int i=0;i<decompressedData.size();i++){ // Identifying what filter was used for each row.
@@ -163,7 +163,7 @@ void image(std::vector<std::vector<pixel>> pixels, std::string fileName){
     }
 
     // Only three blocks are required, IHDR, IDAT, and IEND. The rest is optional metadata that was never researched.
-    std::string compStr = zlibComp(rawStream);
+    std::string compStr = zlibComp(rawStream, PNG);
     std::string idatStr = "IDAT";
     for(int i=0;i<compStr.size();i++)
         idatStr += compStr[i];
