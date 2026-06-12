@@ -6,6 +6,7 @@
 #include <vector>
 #include <math.h>
 #include <string>
+#include <strConv.h>
 
 // Pi. Because why not?
 const double pi = 3.1415926535897932384626433832795;
@@ -1295,6 +1296,10 @@ point midpoint(point p1, point p2){
     return point((p1.x+p2.x)/2,(p1.y+p2.y)/2);
 }
 
+point orthocenter(point p1,point p2,point p3){
+    return point((p1.x+p2.x+p3.x)/3,(p1.y+p2.y+p3.y)/3);
+}
+
 /*
 * dist - Calculates the distance between two points.
 */
@@ -1338,6 +1343,14 @@ struct ps {
     void print() {
         std::cout << m << " " << b << " " << yFunc;
     }
+
+    // linDist - Return how far a point is from the line created by point slope function. Sign of the result refers to what side of the line the point is on.
+    double linDist(point p){
+        if(yFunc)
+            return (p.y-m*p.x-b)/sqrt(m*m+1);
+        else
+            return (p.x-m*p.y-b)/sqrt(m*m+1);
+    }
 };
 
 /*
@@ -1376,6 +1389,28 @@ psInterResult psInter(ps l1, ps l2) {
         final.result = point(v2, v1);
     return final;
 };
+
+/*
+* lineCross - Takes lines l1 and l2 and returns true if they share an intersection point.
+*/
+bool lineCross(std::vector<point> l1, std::vector<point> l2){
+    ps ps1=ps(l1[0],l1[1]);
+    ps ps2=ps(l2[0],l2[1]);
+    psInterResult sub=psInter(ps1,ps2);
+    double pr1=-1;
+    double pr2=-1;
+    if(sub.valid){
+        if(ps1.yFunc)
+            pr1=(sub.result.x-l1[0].x)/(l1[1].x-l1[0].x);
+        else
+            pr1=(sub.result.y-l1[0].y)/(l1[1].y-l1[0].y);
+        if(ps2.yFunc)
+            pr2=(sub.result.x-l2[0].x)/(l2[1].x-l2[0].x);
+        else
+            pr2=(sub.result.y-l2[0].y)/(l2[1].y-l2[0].y);
+    }  
+    return (pr1>=0&&pr1<=1&&pr2>=0&&pr2<=1); // A shared intersection only exists if the progress between each line lies in between 0 and 1.
+}
 
 /*
 * bounds - Represents a rectangular area with minimums and maximums.
@@ -2176,24 +2211,9 @@ std::vector<intersection> findInters(para p1, para p2) {
     for (unsigned int i = 0; i < p1.mainPoints.size() - 1; i++) {
         for (unsigned int j = 0; j < p2.mainPoints.size() - 1; j++) {
             if (p1.mainPoints[i] != p1.mainPoints[i + 1] && p2.mainPoints[j] != p2.mainPoints[j + 1]) {
-                pr1 = 0;
-                pr2 = 0;
-                s1 = ps(p1.mainPoints[i], p1.mainPoints[i + 1]);
-                s2 = ps(p2.mainPoints[j], p2.mainPoints[j + 1]);
-                psInterResult inte = psInter(s1, s2); // Each line created by the mainPoints cache is made into a ps object and is checked for any intersections.
-                if (inte.valid) {
-                    if (s1.yFunc)
-                        pr1 = (inte.result.x - p1.mainPoints[i].x) / (p1.mainPoints[i + 1].x - p1.mainPoints[i].x);
-                    else
-                        pr1 = (inte.result.y - p1.mainPoints[i].y) / (p1.mainPoints[i + 1].y - p1.mainPoints[i].y);
-                    if (s2.yFunc)
-                        pr2 = (inte.result.x - p2.mainPoints[j].x) / (p2.mainPoints[j + 1].x - p2.mainPoints[j].x);
-                    else
-                        pr2 = (inte.result.y - p2.mainPoints[j].y) / (p2.mainPoints[j + 1].y - p2.mainPoints[j].y);
-                    if (pr1 >= 0 && pr1 <= 1 && pr2 >= 0 && pr2 <= 1) { // An estimation is only added if the intersection point lies inbetween the cached points.
-                        ints.push_back(intersection(p1.positions[i] + (p1.positions[i + 1] - p1.positions[i]) * pr1, p2.positions[j] + (p2.positions[j + 1] - p2.positions[j]) * pr2));
-                        listInds.push_back(std::vector<int>({ int(i),int(j) }));
-                    }
+                if(lineCross(std::vector<point>({p1.mainPoints[i], p1.mainPoints[i + 1]}),std::vector<point>({p2.mainPoints[j], p2.mainPoints[j + 1]}))){ // An estimation is only added if the intersection point lies inbetween the cached points.
+                    ints.push_back(intersection(p1.positions[i] + (p1.positions[i + 1] - p1.positions[i]) * pr1, p2.positions[j] + (p2.positions[j + 1] - p2.positions[j]) * pr2));
+                    listInds.push_back(std::vector<int>({ int(i),int(j) }));
                 }
             }
         }
@@ -2350,6 +2370,9 @@ struct prism {
     point center;
     bounds limits = bounds(0, 0, 0, 0);
     std::vector<fillSquare> squares;
+    std::vector<point> pointCache;
+    std::vector<std::vector<int>> triangleInds;
+    std::vector<std::vector<point>> trianglePoints;
     prism() {};
     prism(std::vector<para> s) : sides(rearrange(s)) {
         if (sides.size()) { // Upon construction, the vector of parametric curves is checked to determine if the make an enclosure. If they cannot, an empty vector is returned and contstuction is skipped.
@@ -2504,6 +2527,114 @@ struct prism {
             else if (tBlocks[0].t == FS_IN) // If a checked block is confirmed inside, its added to the final array of fillSquares.
                 squares.push_back(tBlocks[0]);
             tBlocks.erase(tBlocks.begin(), tBlocks.begin() + 1); // First block in the array is always taken out and continues until its empty.
+        }
+    }
+
+    // trunc - Takes a set of curves and only returns the fragments that fall within the prism.
+    std::vector<para> trunc(std::vector<para> sub){
+        std::vector<para> final;
+        for(int i=0;i<sub.size();i++){
+            std::vector<double> splits;
+            for(int j=0;j<sides.size();j++){
+                std::vector<intersection> sub2 = findInters(sub[i],sides[j]); // Finds any intersections between the given curve set and the prism sides.
+                for(int k=0;k<sub2.size();k++)
+                    splits.push_back(sub2[k].prog1);
+            }
+            std::vector<double> sortSplits = std::vector<double>({0}); // Sorts the intersections from least to greatest.
+            int count=0;
+            double lowestInd=0;
+            double lowestVal=0;
+            if(splits.size())
+                lowestVal = splits[0];
+            while(splits.size()){
+                if(splits[count] < lowestVal){
+                    lowestInd=count;
+                    lowestVal=splits[count];
+                }
+                count++;
+                if(count == splits.size()){
+                    sortSplits.push_back(splits[lowestInd]);
+                    splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
+                    if(splits.size()){
+                        count=0;
+                        lowestInd=0;
+                        lowestVal=splits[0];
+                    }
+                }
+            }
+            sortSplits.push_back(1);
+            for(int j=0;j<sortSplits.size()-1;j++){
+                point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2); // For each curve in the curve set, the midpoint of each split piece is taken and checked if it lies in the inside of the prism. If the midpoint in inside, so is the piece.
+                if(inside(sub3, true))
+                    final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
+            }
+        }
+        return final;
+    }
+
+    // selfInter - Returns true if the line made by the cached points either crosses the prism or lies outside the prism. Used for triangle configuration.
+    bool selfInter(int p1, int p2){
+        bool final=false;
+        if(pointCache.size()){
+            for(int i=0;i<pointCache.size();i++){
+                if(!(i == p1 || (i+1)%pointCache.size() == p1 || i == p2 || (i+1)%pointCache.size() == p2)){
+                    if(lineCross(std::vector<point>({pointCache[p1],pointCache[p2]}),std::vector<point>({pointCache[i],pointCache[(i+1)%pointCache.size()]})))
+                        final = true;
+                }
+            }
+            if(!final&&!((p1 == (p2+1)%pointCache.size())||(p2 == (p1+1)%pointCache.size()))) // If there are no intersections and the points are not adjacent to each other, the midpoint of the line is taken and checked to see if its inside the prism.
+                final=!inside(midpoint(pointCache[p1],pointCache[p2]),true);
+        }
+        return final;
+    }
+
+    // configTriangles - Splits each side of the prism by factor f and creates a set of triangles that lie on the inside of the prism.
+    void configTriangles(int f){
+        triangleInds.clear();
+        trianglePoints.clear();
+        pointCache.clear();
+        for(int i=0;i<sides.size();i++){
+            for(int j=0;j<f;j++)
+                pointCache.push_back(sides[i](double(j)/10));
+        }
+        std::vector<std::vector<int>> tSpec = std::vector<std::vector<int>>({std::vector<int>({0,1})}); // Each triangle starts off as two points, with a third added in after analysis.
+        std::vector<bool> tSpecSide = std::vector<bool>({false});
+        for(int i=0;i<pointCache.size()-2;i++){ // For a set of n point that make up a prism, the amount of triangles that can be used to fill it in is n-2.
+            point mp=midpoint(pointCache[tSpec[0][0]],pointCache[tSpec[0][1]]);
+            double la=angleVector(pointCache[tSpec[0][0]],pointCache[tSpec[0][1]]);
+            ps pb=ps(mp,point(mp.x+cos(la+pi/2),mp.y+sin(la+pi/2))); // The perpendicular bisector is used to final the third point.
+            int lowestInd=-1;
+            double lowestVal=-1;
+            ps ml=ps(pointCache[tSpec[0][0]],pointCache[tSpec[0][1]]);
+            for(int j=0;j<pointCache.size();j++){
+                if(j != tSpec[0][0]&&j != tSpec[0][1]&&((ml.linDist(pointCache[j])>0 == tSpecSide[0]) || !i)){ // If the prospect point is not one of the two points already selected and it lies on the opposite side of the current triangle, or if its the first triangle to be created, then the current point is checked.
+                    if(lowestInd == -1){ // Sets the lowest possible point if not already set.
+                        lowestInd=j;
+                        lowestVal=abs(pb.linDist(pointCache[j]));
+                    }
+                    if(abs(pb.linDist(pointCache[j]))<lowestVal){ // The point with the lowest linear distance with respect to the perpendicular bisector is chosen.
+                        if(!selfInter(tSpec[0][0],j)&&!selfInter(tSpec[0][1],j)){ // The new lowest is set only if the lines from the two previously selected points to the current point do not cross the prism.
+                            lowestInd=j;
+                            lowestVal=abs(pb.linDist(pointCache[j]));
+                        }
+                    }
+                }
+            }
+            triangleInds.push_back(std::vector<int>({tSpec[0][0],tSpec[0][1],lowestInd})); // The new triangle is pushed to both triangleInds and trianglePoints.
+            trianglePoints.push_back(std::vector<point>({pointCache[tSpec[0][0]],pointCache[tSpec[0][1]],pointCache[lowestInd]}));
+            point oc=orthocenter(pointCache[tSpec[0][0]],pointCache[tSpec[0][1]],pointCache[lowestInd]); // Center of the current triangle used to find an adjacent triangle.
+            ps ts1=ps(pointCache[tSpec[0][0]],pointCache[lowestInd]);
+            ps ts2=ps(pointCache[tSpec[0][1]],pointCache[lowestInd]);
+            if(!((tSpec[0][0] == (lowestInd+1)%pointCache.size())||(lowestInd == (tSpec[0][0]+1)%pointCache.size()))){ // For each point, a new pair of points is added to the queue only if that point and the new point are not adjacent to each other.
+                tSpec.push_back(std::vector<int>({tSpec[0][0],lowestInd}));
+                tSpecSide.push_back(ts1.linDist(oc)<0); // Side indicator used to determine where to look for the next point and prevent triangle overlap.
+            }
+            if(!((tSpec[0][1] == (lowestInd+1)%pointCache.size())||(lowestInd == (tSpec[0][1]+1)%pointCache.size()))){
+                tSpec.push_back(std::vector<int>({tSpec[0][1],lowestInd}));
+                tSpecSide.push_back(ts2.linDist(oc)<0);
+            }
+            tSpec.erase(tSpec.begin(),tSpec.begin()+1); // A triangle has been made using the current pair, so its removed from the queue.
+            tSpecSide.erase(tSpecSide.begin(),tSpecSide.begin()+1);
         }
     }
 };
@@ -2795,45 +2926,7 @@ std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
 * pointSlopeWarp(standard/prism) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the prism limits.
 */
 std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point offset, prism limits){
-    std::vector<para> sub = pointSlopeWarp(bx, by, c, scope, offset, limits.limits);
-    std::vector<para> final;
-    for(int i=0;i<sub.size();i++){
-        std::vector<double> splits;
-        for(int j=0;j<limits.sides.size();j++){
-            std::vector<intersection> sub2 = findInters(sub[i],limits.sides[j]);
-            for(int k=0;k<sub2.size();k++)
-                splits.push_back(sub2[k].prog1);
-        }
-        std::vector<double> sortSplits = std::vector<double>({0});
-        int count=0;
-        double lowestInd=0;
-        double lowestVal=0;
-        if(splits.size())
-            lowestVal = splits[0];
-        while(splits.size()){
-            if(splits[count] < lowestVal){
-                lowestInd=count;
-                lowestVal=splits[count];
-            }
-            count++;
-            if(count == splits.size()){
-                sortSplits.push_back(splits[lowestInd]);
-                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
-                if(splits.size()){
-                    count=0;
-                    lowestInd=0;
-                    lowestVal=splits[0];
-                }
-            }
-        }
-        sortSplits.push_back(1);
-        for(int j=0;j<sortSplits.size()-1;j++){
-            point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2);
-            if(limits.inside(sub3, true))
-                final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
-        }
-    }
-    return final;
+    return limits.trunc(pointSlopeWarp(bx, by, c, scope, offset, limits.limits));
 }
 
 /*
@@ -2853,43 +2946,192 @@ std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point sc
 * circPoints(prism) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the prism limits.
 */
 std::vector<para> circPoints(std::vector<point> pl, double an, prism limits){
-    std::vector<para> sub = circPoints(pl, an, limits.limits);
-    std::vector<para> final;
-    for(int i=0;i<sub.size();i++){
-        std::vector<double> splits;
-        for(int j=0;j<limits.sides.size();j++){
-            std::vector<intersection> sub2 = findInters(sub[i],limits.sides[j]);
-            for(int k=0;k<sub2.size();k++)
-                splits.push_back(sub2[k].prog1);
-        }
-        std::vector<double> sortSplits = std::vector<double>({0});
-        int count=0;
-        double lowestInd=0;
-        double lowestVal=0;
-        if(splits.size())
-            lowestVal = splits[0];
-        while(splits.size()){
-            if(splits[count] < lowestVal){
-                lowestInd=count;
-                lowestVal=splits[count];
-            }
-            count++;
-            if(count == splits.size()){
-                sortSplits.push_back(splits[lowestInd]);
-                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
-                if(splits.size()){
-                    count=0;
-                    lowestInd=0;
-                    lowestVal=splits[0];
+    return limits.trunc(circPoints(pl, an, limits.limits));
+}
+
+enum stringFuncs{
+    NONE_SF,
+    BEZIER,
+    SINUSOID,
+    COMPCURVE,
+    TRANSFORM,
+    EXTEND,
+    TANGENT,
+};
+
+std::vector<std::vector<para>> stringNotation(std::string s){
+    std::string vh="";
+    stringFuncs func=NONE_SF;
+    int valCount=0;
+    point sampPoint;
+    std::vector<point> sampPointVec;
+    std::vector<std::vector<para>> final;
+    std::vector<double> valStoreDoub;
+    std::vector<int> valStoreInt;
+    std::vector<para> valStorePara;
+    transformType sampTransform;
+    std::vector<transformNode> valStoreTN;
+    for(int i=0;i<s.size();i++){
+        switch(func){
+        case BEZIER:
+            if(s[i] == ','){
+                valCount++;
+                if(valCount%2)
+                    sampPoint.x=str2Doub(vh);
+                else{
+                    sampPoint.y=str2Doub(vh);
+                    sampPointVec.push_back(sampPoint);
                 }
+                vh = "";
             }
+            else if(s[i] == ';'){
+                sampPoint.y=str2Doub(vh);
+                sampPointVec.push_back(sampPoint);
+                final.push_back(std::vector<para>({bez(sampPointVec)}));
+                sampPointVec.clear();
+                valCount=0;
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
+        case SINUSOID:
+            if(s[i] == ','){
+                valStoreDoub.push_back(str2Doub(vh));
+                vh = "";
+            }
+            else if(s[i] == ';'){
+                valStoreDoub.push_back(str2Doub(vh));
+                final.push_back(std::vector<para>({sinusoid(point(valStoreDoub[0],valStoreDoub[1]),valStoreDoub[2],valStoreDoub[3],valStoreDoub[4],valStoreDoub[5])}));
+                valStoreDoub.clear();
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
+        case COMPCURVE:
+            if(s[i] == ','){
+                valStoreInt.push_back(str2Int(vh));
+                vh = "";
+            }
+            else if(s[i] == ';'){
+                valStoreInt.push_back(str2Int(vh));
+                final.push_back(std::vector<para>({compCurve(final[valStoreInt[0]][valStoreInt[1]],final[valStoreInt[2]][valStoreInt[3]])}));
+                valStoreInt.clear();
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
+        case TRANSFORM:
+            if(s[i] == ','){
+                if(valCount == 0 || valCount == 1)
+                    valStoreInt.push_back(str2Int(vh));
+                else if(valCount == 2)
+                    valStoreDoub.push_back(str2Doub(vh));
+                vh = "";
+            }
+            else if(s[i] == '|'){
+                if(valCount == 0){
+                    valStoreInt.push_back(str2Int(vh));
+                    for(int j=0;j<valStoreInt.size();j+=2)
+                        valStorePara.push_back(final[valStoreInt[j]][valStoreInt[j+1]]);
+                    valStoreInt.clear();
+                }
+                if(valCount == 1)
+                    valStoreInt.push_back(str2Int(vh));
+                valCount++;
+            }
+            else if(s[i] == ';'){
+                valStoreDoub.push_back(str2Doub(vh));
+                valCount = 0;
+                for(int j=0;j<valStoreInt.size();j++){
+                    if(valStoreInt[j] == 0 || valStoreInt[j] == 2){
+                        valStoreTN.push_back(transformNode(transformType(valStoreInt[valCount]),valStoreDoub[valCount],valStoreDoub[valCount+1]));
+                        valCount += 2;
+                    }
+                    else if (valStoreInt[j] == 1){
+                        valStoreTN.push_back(transformNode(valStoreDoub[valCount]));
+                        valCount++;
+                    }
+                    else if (valStoreInt[j] == 3 || valStoreInt[j] == 5){
+                        valStoreTN.push_back(transformNode(transformType(valStoreInt[valCount]),final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].x,final[int(valStoreDoub[valCount+2])][int(valStoreDoub[valCount+3])].y));
+                        valCount += 4;
+                    }
+                    else if (valStoreInt[j] == 4){
+                        if(valStoreDoub[valCount+2])
+                            valStoreTN.push_back(transformNode(final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].y));
+                        else
+                            valStoreTN.push_back(transformNode(final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].x));
+                        valCount += 3;
+                    }
+                }
+                final.push_back(transform(valStorePara,valStoreTN));
+                valStorePara.clear();
+                valStoreTN.clear();
+                valStoreInt.clear();
+                valStoreDoub.clear();
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
+        case EXTEND:
+            if(s[i] == ','){
+                valStoreDoub.push_back(str2Doub(vh));
+                vh = "";
+            }
+            else if(s[i] == ';'){
+                valStoreDoub.push_back(str2Doub(vh));
+                if(valStoreDoub.size() == 3)
+                    final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2])}));
+                if(valStoreDoub.size() == 4)
+                    final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2],valStoreDoub[3])}));
+                if(valStoreDoub.size() == 7){
+                    if(valStoreDoub[4])
+                        final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],final[int(valStoreDoub[2])][int(valStoreDoub[3])].y,quickTransform(valStoreDoub[5],valStoreDoub[6]))}));
+                    else
+                        final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],final[int(valStoreDoub[2])][int(valStoreDoub[3])].x,quickTransform(valStoreDoub[5],valStoreDoub[6]))}));
+                }
+                valStoreDoub.clear();
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
+        case TANGENT:
+            if(s[i] == ','){
+                valStoreDoub.push_back(str2Doub(vh));
+                vh = "";
+            }
+            else if(s[i] == ';'){
+                valStoreDoub.push_back(str2Doub(vh));
+                final.push_back(std::vector<para>({tangent(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2],final[int(valStoreDoub[3])][int(valStoreDoub[4])],valStoreDoub[5])}));
+                valStoreDoub.clear();
+                vh = "";
+                func = NONE_SF;
+            }
+            else
+                vh += s[i];
+            break;
         }
-        sortSplits.push_back(1);
-        for(int j=0;j<sortSplits.size()-1;j++){
-            point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2);
-            if(limits.inside(sub3, true))
-                final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
-        }
+        if(s[i] == '!')
+            func = BEZIER;
+        if(s[i] == '@')
+            func = SINUSOID;
+        if(s[i] == '#')
+            func = COMPCURVE;
+        if(s[i] == '$')
+            func = TRANSFORM;
+        if(s[i] == '%')
+            func = EXTEND;
+        if(s[i] == '^')
+            func = TANGENT;
     }
     return final;
 }
