@@ -11,6 +11,58 @@
 // Pi. Because why not?
 const double pi = 3.1415926535897932384626433832795;
 
+std::vector<int> sortVec(std::vector<int> l){
+    std::vector<int> final;
+    double lowestVal=0;
+    if(l.size())
+        lowestVal=l[0];
+    int lowestInd=0;
+    int count=0;
+    while(l.size()){
+        if(l[count] < lowestVal){
+            lowestVal = l[count];
+            lowestInd = count;
+        }
+        count++;
+        if(count == l.size()){
+            final.push_back(lowestVal);
+            l.erase(l.begin() + lowestInd, l.begin()+lowestInd+1);
+            if(l.size()){
+                lowestInd = 0;
+                lowestVal = l[0];
+                count = 0;
+            }
+        }
+    }
+    return final;
+}
+
+std::vector<double> sortVec(std::vector<double> l){
+    std::vector<double> final;
+    double lowestVal=0;
+    if(l.size())
+        lowestVal=l[0];
+    int lowestInd=0;
+    int count=0;
+    while(l.size()){
+        if(l[count] < lowestVal){
+            lowestVal = l[count];
+            lowestInd = count;
+        }
+        count++;
+        if(count == l.size()){
+            final.push_back(lowestVal);
+            l.erase(l.begin() + lowestInd, l.begin()+lowestInd+1);
+            if(l.size()){
+                lowestInd = 0;
+                lowestVal = l[0];
+                count = 0;
+            }
+        }
+    }
+    return final;
+}
+
 /*
 * fact - Takes an integer x and returns x!
 */
@@ -1243,9 +1295,6 @@ expr comp(expr x, expr y) {
     return final;
 }
 
-// angleDeg - If set to true, the deriveAngle function of the point object will return value in degrees. Radians if otherwise.
-bool angleDeg = false;
-
 /*
 * point - Represents an ordered pair with an x and y value.
 */
@@ -1270,7 +1319,7 @@ struct point {
         return !((*this) == n);
     }
 
-    // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians by default, but will return in degrees if angleDeg is set to true.
+    // deriveAngle - Calculates the angle made by the vector between the point and the origin in standard notation. Returns in radians.
     double deriveAngle() {
         double final = 0;
         if (equal(x, 0)) {
@@ -1286,8 +1335,6 @@ struct point {
             if (x > 0 && y < 0)
                 final += 2*pi;
         }
-        if(angleDeg)
-            final = final * 180 / pi;
         return final;
     }
 };
@@ -1952,6 +1999,9 @@ struct para {
     }
 };
 
+/*
+* pointSet - Takes a set of para curves, splits them up by factor f, and returns their points as a three-dimensional matrix.
+*/
 void pointSet(std::vector<para> p, double f){
     std::cout << "[";
     for(int j=0;j<p.size();j++){
@@ -1977,6 +2027,7 @@ void pointSet(std::vector<para> p, double f){
     }
     std::cout << "];";
 }
+
 /*
 * angleVector - Returns the angle vector created from points p1 and p2.
 */
@@ -2080,7 +2131,7 @@ para tangent(para b, double bp, para s, double sp) {
     double sa = ds(sp).deriveAngle();
     double ba = db(bp).deriveAngle();
     point bap = b(bp);
-    para final = s.transform(std::vector<transformNode>({transformNode(TRANSLATE, -stp.x, -stp.y),transformNode(ba - sa),transformNode(TRANSLATE, bap.x, bap.y)}));
+    para final = s.transform(std::vector<transformNode>({transformNode(TRANSLATE, -stp.x, -stp.y),transformNode((ba - sa)*180/pi),transformNode(TRANSLATE, bap.x, bap.y)}));
     final.optimize();
     return final;
 }
@@ -2640,6 +2691,154 @@ struct prism {
 };
 
 /*
+* segment - Takes para curve x and expands it to create a segment of thickness t.
+*/
+prism segment(para x, double t){
+    para b1 = extend(x,t/2);
+    para b2 = extend(x.slice(1,0),t/2);
+    para ep = sinusoid(point(0,0),t/2,t/2,0,180);
+    para ep1 = tangent(b1,1,ep,0);
+    para ep2 = tangent(b2,1,ep,0);
+    return prism(std::vector<para>({b1,ep1,b2,ep2}));
+}
+
+/*
+* rearrangePrime - Takes a vector of para curves and returns all prisms that could be made from the curves.
+*/
+std::vector<prism> rearrangePrime(std::vector<para> ipl) {
+    std::vector<para> pl;
+    for(int i=0;i<ipl.size();i++){
+        pl.push_back(ipl[i]);
+        pl[i].configure();
+    }
+    std::vector<std::vector<para>> final;
+    std::vector<prism> finalP;
+    std::vector<int> inds = std::vector<int>({ 0 });
+    std::vector<bool> dirs = std::vector<bool>({ true });
+    bool closed = false;
+    int count = 1;
+    point ep = pl[0](1);
+    std::vector<int> rejected;
+    bool invalid = false;
+    int wCount=0;
+    while(pl.size() && wCount < 100){
+        wCount++;
+        inds = std::vector<int>({ 0 });
+        dirs = std::vector<bool>({ true });
+        rejected.clear();
+        count = 1;
+        closed = false;
+        ep = pl[0](1);
+        if (pl.size() > 1) {
+            while (!closed && !invalid) { // Continues until prism is closed or its confirmed that no prism can be made.
+                if (!has(inds, count) && !has(rejected, count)) {
+                    if (ep == pl[count](0)) {
+                        inds.push_back(count);
+                        dirs.push_back(true);
+                        count = 0;
+                    }
+                    else if (ep == pl[count](1)) {
+                        inds.push_back(count);
+                        dirs.push_back(false);
+                        count = 0;
+                    }
+                }
+                count += 1;
+                ep = pl[inds[inds.size() - 1]](dirs[dirs.size() - 1]);
+                if (ep == pl[0](0))
+                    closed = true;
+                if (count == pl.size() && !closed) {
+                    rejected.push_back(inds[inds.size() - 1]);
+                    inds.erase(inds.end() - 1);
+                    dirs.erase(dirs.end() - 1);
+                    count = 1;
+                    if (!inds.size()){
+                        invalid = true;
+                        pl.erase(pl.begin(),pl.begin()+1);
+                    }
+                }
+            }
+        }
+        else{
+            invalid = (pl[0].mainPoints[0] != pl[0].mainPoints[pl[0].mainPoints.size() - 1]);
+            if(invalid)
+                pl.erase(pl.begin(),pl.begin()+1);
+        }
+        if(!invalid) {
+            final.push_back(std::vector<para>({}));
+            for (unsigned int i = 0; i < inds.size(); i++) {
+                if (dirs[i])
+                    final[final.size()-1].push_back(pl[inds[i]]);
+                else
+                    final[final.size()-1].push_back(pl[inds[i]].slice(1, 0));
+            }
+            finalP.push_back(prism(final[final.size()-1]));
+            std::vector<int> sortInds = sortVec(inds);
+            for(int i=inds.size()-1;i>-1;i--)
+                pl.erase(pl.begin()+sortInds[i],pl.begin()+sortInds[i]+1);
+        }
+    }
+    return finalP;
+};
+
+// Represents a type of prism cross, either union or intersection.
+enum prismCrossTypes{
+    PR_INTERSECTION,
+    PR_UNION,
+};
+
+/*
+* prismCross - Takes two prisms and crosses them. Can return either the union or the intersection between the two.
+*/
+std::vector<prism> prismCross(prism p1, prism p2, prismCrossTypes type){
+    std::vector<std::vector<double>> inters1;
+    for(int i=0;i<p1.sides.size();i++)
+        inters1.push_back(std::vector<double>({}));
+    std::vector<std::vector<double>> inters2;
+    for(int i=0;i<p2.sides.size();i++)
+        inters2.push_back(std::vector<double>({}));
+    for(int i=0;i<p1.sides.size();i++){
+        for(int j=0;j<p2.sides.size();j++){
+            std::vector<intersection> sub = findInters(p1.sides[i],p2.sides[j]);
+            for(int k=0;k<sub.size();k++){
+                inters1[i].push_back(sub[k].prog1);
+                inters2[j].push_back(sub[k].prog2);
+            }
+        }
+    }
+    std::vector<std::vector<double>> split1;
+    for(int i=0;i<inters1.size();i++){
+        split1.push_back(std::vector<double>({0}));
+        std::vector<double> sortInts = sortVec(inters1[i]);
+        for(int j=0;j<sortInts.size();j++)
+            split1[i].push_back(sortInts[j]);
+        split1[i].push_back(1);
+    }
+    std::vector<std::vector<double>> split2;
+    for(int i=0;i<inters2.size();i++){
+        split2.push_back(std::vector<double>({0}));
+        std::vector<double> sortInts = sortVec(inters2[i]);
+        for(int j=0;j<sortInts.size();j++)
+            split2[i].push_back(sortInts[j]);
+        split2[i].push_back(1);
+    }
+    std::vector<para> final;
+    for(int i=0;i<split1.size();i++){
+        for(int j=0;j<split1[i].size()-1;j++){
+            if(p2.inside(p1.sides[i]((split1[i][j]+split1[i][j+1])/2),true) != bool(type))
+                final.push_back(p1.sides[i].slice(split1[i][j],split1[i][j+1]));
+        }
+    }
+    for(int i=0;i<split2.size();i++){
+        for(int j=0;j<split2[i].size()-1;j++){
+            if(p1.inside(p2.sides[i]((split2[i][j]+split2[i][j+1])/2),true) != bool(type))
+                final.push_back(p2.sides[i].slice(split2[i][j],split2[i][j+1]));
+        }
+    }
+    return rearrangePrime(final);
+}
+
+/*
 * pointSlopeWarp(single/bounds) - Takes a sample curve and warps it using the tangent lines of two base parametric curves at specific points. Result includes any curves that lie within the bounds limits.
 */
 std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point offset, bounds limits){
@@ -2949,6 +3148,9 @@ std::vector<para> circPoints(std::vector<point> pl, double an, prism limits){
     return limits.trunc(circPoints(pl, an, limits.limits));
 }
 
+/*
+* stringFuncs - Represents different types of functions that can be used in string notation. Currently unfinished.
+*/
 enum stringFuncs{
     NONE_SF,
     BEZIER,
@@ -2959,6 +3161,9 @@ enum stringFuncs{
     TANGENT,
 };
 
+/*
+* stringNotation - Takes a raw string, parses it, and returns the resulting curves. Currently unfinished.
+*/
 std::vector<std::vector<para>> stringNotation(std::string s){
     std::string vh="";
     stringFuncs func=NONE_SF;
