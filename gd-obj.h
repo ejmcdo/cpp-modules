@@ -2002,6 +2002,7 @@ level defaultLevel() {
     level final;
     final.props.push_back(kProp("kCEK", 4));
     final.props.push_back(kProp("k2", ""));
+    final.props.push_back(kProp("k3", ""));
     final.props.push_back(kProp("k4", ""));
     final.props.push_back(kProp("k5", "Player"));
     final.props.push_back(kProp("k101", "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"));
@@ -2143,16 +2144,13 @@ std::vector<xmlNode> loadLevelsSuff(bool getSuff) {
     return final;
 }
 
-// inject - Takes a level string and "injects" it into the user's unfinished levels. If a level already exists with the specified name, its overwritten. Otherwise, a new level is created.
-void inject(std::string levString, std::string name) {
+// inject - Takes a level and "injects" it into the user's unfinished levels. If a level already exists with newLevel's name, it's overwritten. Otherwise, a new level is created.
+void inject(level newLevel) {
     std::vector<xmlNode> suffNodes = loadLevelsSuff(true);
-    level newLevel = defaultLevel();
-    newLevel.setPropString("k2", name);
-    newLevel.setPropString("k4", levString);
     std::vector<level> newLevels;
     int targInd = -1;
     for (unsigned int i = 0; i < levels.size(); i++) {
-        if (levels[i].getPropString("k2") == name)
+        if (levels[i].getPropString("k2") == newLevel.getPropString("k2"))
             targInd = i;
     }
     if (targInd == -1) {
@@ -2180,6 +2178,25 @@ void inject(std::string levString, std::string name) {
         totalNodes.push_back(suffNodes[i]);
     }
     fileWrite(fullFileName, dataFileEncode(xmlFormat(totalNodes)));
+}
+
+// inject - Takes a level string and "injects" it into the user's unfinished levels with the specified name.
+void inject(std::string levString, std::string name) {
+    std::vector<xmlNode> suffNodes = loadLevelsSuff(true);
+    level newLevel = defaultLevel();
+    newLevel.setPropString("k2", name);
+    newLevel.setPropString("k4", levString);
+    inject(newLevel);
+}
+
+// inject - Takes a level string and "injects" it into the user's unfinished levels with the specified name and description.
+void inject(std::string levString, std::string name, std::string desc) {
+    std::vector<xmlNode> suffNodes = loadLevelsSuff(true);
+    level newLevel = defaultLevel();
+    newLevel.setPropString("k2", name);
+    newLevel.setPropString("k4", levString);
+    newLevel.setPropString("k3", b64enc(desc));
+    inject(newLevel);
 }
 
 // inject - Takes a vector of blocks, converts it to a level string, and injects it into the user's unfinished levels.

@@ -11,6 +11,18 @@
 // Pi. Because why not?
 const double pi = 3.1415926535897932384626433832795;
 
+/*
+* printVec - Pretty obvious.
+*/
+void printVec(std::vector<double> l) {
+    for (int i = 0; i < l.size(); i++)
+        std::cout << l[i] << " ";
+    std::cout << "\n";
+}
+
+/*
+* sortVec(int) - Takes an integer vector and sorts it from least to greatest.
+*/
 std::vector<int> sortVec(std::vector<int> l){
     std::vector<int> final;
     double lowestVal=0;
@@ -37,6 +49,9 @@ std::vector<int> sortVec(std::vector<int> l){
     return final;
 }
 
+/*
+* sortVec(double) - Takes an double vector and sorts it from least to greatest.
+*/
 std::vector<double> sortVec(std::vector<double> l){
     std::vector<double> final;
     double lowestVal=0;
@@ -60,6 +75,18 @@ std::vector<double> sortVec(std::vector<double> l){
             }
         }
     }
+    return final;
+}
+
+/*
+* sortSplit - Takes a double vector, sorts it, and places it in between 0 and 1. Used for splitting up parametric curves.
+*/
+std::vector<double> sortSplit(std::vector<double> l){
+    std::vector<double> final = std::vector<double>({0});
+    std::vector<double> sort = sortVec(l);
+    for(int i=0;i<sort.size();i++)
+        final.push_back(sort[i]);
+    final.push_back(1);
     return final;
 }
 
@@ -221,6 +248,29 @@ struct poly {
 };
 
 /*
+* cubicMap - Takes specified initial and terminal points for both position and derivative functions and creates a polynomial that meets the constraints.
+*/
+poly cubicMap(double ip, double tp, double iv, double tv, double t) {
+    return poly(std::vector<double>({ ((iv + tv) * t - 2 * (tp - ip)) / pow(t,3),(3 * (tp - ip) - (2 * iv + tv) * t) / pow(t,2),iv,ip }));
+}
+
+/*
+* quintMap - Takes specified initial, halfway, and terminal points for both position and derivative functions and creates a polynomial that meets the constraints.
+*/
+poly quintMap(double p1, double p2, double p3, double v1, double v2, double v3, double t) {
+    double c1 = p2 - p1;
+    double c2 = p3 - p1;
+    return poly(std::vector<double>({
+        4 * (-6 * c2 + t * (v1 + 4 * v2 + v3)) / pow(t,5),
+        4 * (4 * c1 + 13 * c2 - t * (3 * v1 + 10 * v2 + 2 * v3)) / pow(t,4),
+        (-2 * (16 * c1 + 17 * c2) + t * (13 * v1 + 32 * v2 + 5 * v3)) / pow(t,3),
+        (16 * c1 + 7 * c2 - t * (6 * v1 + 8 * v2 + v3)) / pow(t,2),
+        v1,
+        p1
+        }));
+}
+
+/*
 * expNodeTypes - Different types of expression nodes.
 * POLYNOMIAL - Represents a poly object.
 * COMPOUND - Represents a combination of previously calculated values.
@@ -233,6 +283,7 @@ enum expNodeType {
     FRACTION,
     CONSTANT,
 };
+
 /*
 * fullNodeFuncNames - Names of each type of expression Node as strings.
 */
@@ -486,7 +537,7 @@ bool has(std::vector<double> l, double n) {
 
 int cap = 1000000;
 /*
-* exp - Represents a full expression using mathematical functions(square root, sin, cosine) and different combinations of them.
+* expr - Represents a full expression using mathematical functions(square root, sin, cosine) and different combinations of them.
 */
 struct expr {
 
@@ -510,7 +561,7 @@ struct expr {
     expr(poly p, expNodeFuncType f, bool n){l.push_back(expNode(p,f,n));}
     expr(double n){l.push_back(expNode(n));}
 
-    // f - Takes a value x and return the function of x.
+    // Operator overload () - Takes a value x and return the function of x.
     double operator()(double x) {
         std::vector<double> valStore; // Vector that stores values during evaluation. For each expNode, the values are evaluated and stored for future use.
         for (unsigned int i = 0; i < len(); i++) {
@@ -550,6 +601,7 @@ struct expr {
                 break;
             }
             cVal *= pow(-1, l[i].n);
+            cVal = equal(cVal,0) ? 0 : cVal;
             valStore.push_back(cVal); // For each value evaluated, the value is stored in valStore.
         }
         if (l.size()) // Upon successful evaluation, valStore will have the same amount of entries as l. The final value in this list will be the final value of the evaluated expression. In cases where l is empty, 0 is returned.
@@ -1034,7 +1086,7 @@ struct expr {
             }
             dTerms.push_back(int(final.l.size()) - 1); // Every term is evaluated and stored. This final evaluated term is the derivative of the original expression.
         }
-        //final.optimize(); // Especially in the cases of multiple-order derivatives, many empty value/copies can be present. The optimization function greatly assists with such cases.
+        final.optimize(); // Especially in the cases of multiple-order derivatives, many empty value/copies can be present. The optimization function greatly assists with such cases.
         return final;
     }
 
@@ -1051,32 +1103,7 @@ struct expr {
     // getZeros - Gets any zeros the expression might have and stores them. Takes into account any possible asymptotes the expression has and scans around them.
     void getZeros(int cont){
         if(asymp.size()){ // If there are any asymptotes, the function is split into pieces and each piece is scanned separately for zeros.
-            std::vector<double> sortedAsymp;
-            int lowestInd=0;
-            double lowestVal=asymp[0];
-            int count=0;
-            while(asymp.size()){ // All the asymptotes are sorted from least to greatest before splitting.
-                if(asymp[count] < lowestVal){
-                    lowestInd = count;
-                    lowestVal = asymp[count];
-                }
-                count++;
-                if(count == asymp.size()){
-                    if(sortedAsymp.size()){
-                        if(!equal(asymp[lowestInd],sortedAsymp[sortedAsymp.size()-1]))
-                            sortedAsymp.push_back(asymp[lowestInd]);
-                    }
-                    else
-                        sortedAsymp.push_back(asymp[lowestInd]);
-                    asymp.erase(asymp.begin() + lowestInd, asymp.begin() + lowestInd + 1);
-                    if(asymp.size()){
-                        count = 0;
-                        lowestInd = 0;
-                        lowestVal = asymp[0];
-                    }
-                }
-            }
-            asymp = sortedAsymp;
+            asymp = sortVec(asymp);
             std::vector<double> splits = std::vector<double>({0});
             for(int i=0;i<asymp.size();i++){
                 if(!equal(asymp[i],splits[splits.size()-1]) && !equal(asymp[i],1))
@@ -1141,6 +1168,7 @@ struct expr {
             double vm;
             double vh;
             int count = 0;
+            bool nanFound = false;
             for(int i=0;i<est.size();i++){ // For each estimation, the midpoint is taken and the range is altered depending on the sign of the value evaluated at the midpoint.
                                            // Once the midpoint is negligibly close to 0, the zero is stored and the estimation while loop is stopped.
                 run=true;
@@ -1150,16 +1178,20 @@ struct expr {
                     vl=(*this)(est[i][0])/std::min(mm[1]-mm[0],double(1));
                     vm=(*this)(mid)/std::min(mm[1]-mm[0],double(1));
                     vh=(*this)(est[i][1])/std::min(mm[1]-mm[0],double(1));
+                    nanFound = (isnan(vl) || isnan(vm) || isnan(vh));
                     if(vl*vm < 0)
                         est[i][1] = mid;
                     else if(vh*vm < 0)
                         est[i][0] = mid;
-                    run = (!equal(vm,0)) || equal(pvm,vm);
+                    run = ((!equal(vm,0)) || equal(pvm,vm)) && !nanFound;
                     pvm=vm;
                     count++;
                 }
-                if(count == 1000000)
+                if(count == 1000000){
+                    std::cout << "over\n";
                     print();
+                    std::cout << vl << " " << vm << " " << vh << "\n";
+                }
                 zeros.push_back(mid);
             }
         }
@@ -1294,6 +1326,35 @@ expr comp(expr x, expr y) {
     final.optimize();
     return final;
 }
+
+/*
+* piecewise - Represents a piecewise function thats continuous on the x-axis. timeSplit is used to separate the pieces, and its length is always one less than the amount of pieces.
+* For example: a timeSplit vector of {2,5} would yield piece constraints of x < 2, 2 <= x < 5, and 5 <= x.
+*/
+struct piecewise {
+    std::vector<expr> pieces;
+    std::vector<double> timeSplit;
+    piecewise() {}
+    piecewise(std::vector<expr> p, std::vector<double> t):pieces(p), timeSplit(t) {}
+
+    // Operator overload () - Returns the function of x.
+    double operator()(double x) {
+        int ind = 0;
+        while (ind < timeSplit.size()) { // Checks to see what timeSplit constraints the value falls in between.
+            if (timeSplit[ind] > x) { break; }
+            else { ind++; }
+        }
+        return pieces[ind](x);
+    };
+
+    // cont - Closes any gaps between the pieces and makes the function completely continous.
+    void cont(){
+        for(int i=1;i<pieces.size();i++){
+            double sub = pieces[i](timeSplit[i-1])-pieces[i-1](timeSplit[i-1]);
+            pieces[i] -= sub;
+        }
+    }
+};
 
 /*
 * point - Represents an ordered pair with an x and y value.
@@ -1559,6 +1620,16 @@ struct transformNode {
 };
 
 /*
+* para - Represents a group of points and their respective positions on a parametric curve.
+*/
+struct pointSpec {
+    std::vector<point> points;
+    std::vector<double> pos;
+    pointSpec() {}
+    pointSpec(std::vector<point> p, std::vector<double> po) : points(p), pos(po) {}
+};
+
+/*
 * para - Represents a parametric curve with an x and y component.
 */
 struct para {
@@ -1586,6 +1657,9 @@ struct para {
 
     // linePixels - Pixel positions and magnitudes to be rendered for the curve in an image.
     std::vector<linePixel> linePixels;
+
+    // constantAngle - Upon configuration, set to true if the angle derivative of the curve is 0 across all values.
+    bool constantAngle=false;
 
     // Constructor can take either full expressions or poly objects.
     para() {}
@@ -1668,13 +1742,15 @@ struct para {
     void configure() {
         if (!configured) {
             configured = true;
-            // derivative and double derivative curves are initialized.
+            // Derivative and double derivative curves are initialized.
             para dc = derive();
             para ddc = dc.derive();
+            expr ad = angleDeriv();
             double p = 0;
             point fp = (*this)(p);
             point dp = dc(p);
             point ddp = ddc(p);
+            double adp = ad(p);
 
             // A rough estimate of the curve limits is made before traversal.
             limits.minX = fp.x;
@@ -1698,6 +1774,8 @@ struct para {
                         mainPoints.push_back(fp);
                         derivPoints.push_back(dp);
                         doubleDerivPoints.push_back(ddp);
+                        if(!isnan(adp) and adp == 0)
+                            constantAngle = false;
                         limits.minX = std::min(fp.x, limits.minX);
                         limits.maxX = std::max(fp.x, limits.maxX);
                         limits.minY = std::min(fp.y, limits.minY);
@@ -1714,11 +1792,12 @@ struct para {
                 // Approximation of the curve length. If I could properly integrate using this module, I would.
                 if (mainPoints.size() > 1)
                     length += dist(mainPoints[mainPoints.size() - 2], mainPoints[mainPoints.size() - 1]);
-                // Traversal is made primarily using the reciprocal of the magnitude of the direction vector. In cases where such magnitude approaches 0, the reciprocal of the diagonal of the curve limits is used instead.
+                // Traversal is made primarily using the inverse of the magnitude of the direction vector. In cases where such magnitude approaches 0, the reciprocal of the diagonal of the curve limits is used instead.
                 p += 1 / std::max(dist(dp, point(0, 0)), limits.diagonal());
                 fp = (*this)(p);
                 dp = dc(p);
                 ddp = ddc(p);
+                adp = ad(p);
             }
             positions.push_back(1);
             mainPoints.push_back((*this)(1));
@@ -1997,6 +2076,68 @@ struct para {
         }
         std::cout << "];";
     }
+
+    // imt - Short for Inverse Magnitude Traversal. Starts at 0 and traverses the para curve at a rate of the inverse of the current direction vector magnitude.
+    // The distance between each resulting point is approximately 1(except in the cases of straight lines, in which it is exactly 1). Factor s is used to increase the distance between each resulting point.
+    // This method is also used in configuration, but this function here makes it easily accessible.
+    pointSpec imt(double s) {
+        para df = derive();
+        double p = 0;
+        std::vector<point> final;
+        std::vector<double> finalPos;
+        if (df(0) == point(0, 0)) // In cases where the DV magnitude is 0, the sample point is increased to 0.000001.
+            p = 0.000001;
+        point fp;
+        point dfp;
+        while (p < 1) { // Loops until the end of the curve is reached.
+            fp = (*this)(p);
+            dfp = df(p);
+            final.push_back(fp);
+            finalPos.push_back(p);
+            p += s / sqrt(pow(dfp.x, 2) + pow(dfp.y, 2));
+        }
+        final.push_back((*this)(1));
+        finalPos.push_back(1);
+        return pointSpec(final, finalPos);
+    }
+
+    // devDist - An expression used to determine "deviant distance". Used in optimized traversal.
+    expr devDist(){
+        point ip = (*this)(0);
+        para x2 = (*this).slice(0,0.5);
+        para dx2 = (*this).derive().slice(0,0.5);
+        return (((*this).x-ip.x)*(x2.y-ip.y)-((*this).y-ip.y)*(x2.x-ip.x))/(((*this).x-ip.x)*dx2.x+((*this).y-ip.y)*dx2.y)*sqrt((dx2.x^2)+(dx2.y^2));
+    }
+};
+
+/*
+* piecewisePara - Similar to the normal piecewise, except the pieces are para curves.
+*/
+struct piecewisePara {
+    std::vector<para> pieces;
+    std::vector<double> timeSplit;
+    piecewisePara() {}
+    piecewisePara(std::vector<para> p, std::vector<double> t):pieces(p), timeSplit(t) {}
+
+    // Operator overload () - Returns the function of x.
+    point operator()(double x) {
+        int ind = 0;
+        while (ind < timeSplit.size()) { // Checks to see what timeSplit constraints the value falls in between.
+            if (timeSplit[ind] > x) { break; }
+            else { ind++; }
+        }
+        return pieces[ind](x);
+    };
+
+    // cont - Closes any gaps between the pieces and makes the function completely continous.
+    void cont(){
+        for(int i=1;i<pieces.size();i++){
+            double subX = pieces[i].x(timeSplit[i-1])-pieces[i-1].x(timeSplit[i-1]);
+            double subY = pieces[i].y(timeSplit[i-1])-pieces[i-1].y(timeSplit[i-1]);
+            pieces[i].x -= subX;
+            pieces[i].y -= subY;
+        }
+    }
 };
 
 /*
@@ -2053,6 +2194,140 @@ para bez(std::vector<point> co) {
     }
     return para(xPos, yPos);
 };
+
+/*
+* bSpline - Takes a set of control points and creates a set of B-Spline curves with degree d. Bool r is used to make the set of curves rounded.
+* I completely forgot how this worked. Feel free to research this on your own time if you so please.
+*/
+std::vector<para> bSpline(std::vector<point> cp, int d, bool r) {
+    std::vector<para> final;
+    std::vector<std::vector<double>> points = std::vector<std::vector<double>>({ std::vector<double>({}),std::vector<double>({}) });
+    for (unsigned int i = 0; i < cp.size(); i++) {
+        points[0].push_back(cp[i].x);
+        points[1].push_back(cp[i].y);
+    }
+    std::vector<double> points2;
+    poly pol;
+    poly pol2;
+    std::vector<std::vector<std::vector<std::vector<int>>>> b;
+    std::vector<std::vector<int>> sub;
+    std::vector<int> sub2;
+    std::vector<double> sub3;
+    for (unsigned int i = 0; i < points[0].size() + (d - 2) * (!r); i++) {
+        std::vector<poly> pols;
+        for (int j = 0; j < 2; j++) {
+            points2.clear();
+            if (r) {
+                for (unsigned int k = 0; k < points[j].size(); k++) {
+                    points2.push_back(points[j][k]);
+                }
+                for (int k = 0; k < d; k++) {
+                    points2.push_back(points2[k]);
+                }
+            }
+            else {
+                for (int k = 0; k < d - 1; k++) {
+                    points2.push_back(points[j][0]);
+                }
+                for (unsigned int k = 0; k < points[j].size(); k++) {
+                    points2.push_back(points[j][k]);
+                }
+                for (int k = 0; k < d - 1; k++) {
+                    points2.push_back(points[j][points[j].size() - 1]);
+                }
+            }
+            pol.c.clear();
+            pol.c.push_back(0);
+            for (int k = 0; k < d; k++) {
+                pol.c.push_back(0);
+            }
+            for (int k = 0; k < d + 1; k++) {
+                pol2.c.clear();
+                b.clear();
+                sub.clear();
+                sub2.clear();
+                sub3.clear();
+                for (int l = 0; l < d; l++)
+                    b.push_back(std::vector<std::vector<std::vector<int>>>({}));
+                for (int l = 0; l < d; l++) {
+                    if (l == d - k) {
+                        sub.clear();
+                        sub.push_back(std::vector<int>({ l }));
+                        b[0].push_back(sub);
+                    }
+                    else if (l == d - k - 1) {
+                        sub.clear();
+                        sub.push_back(std::vector<int>({ -(l + 2) }));
+                        b[0].push_back(sub);
+                    }
+                    else {
+                        sub.clear();
+                        b[0].push_back(sub);
+                    }
+                }
+                for (int m = 0; m < d - 1; m++) {
+                    for (int l = 0; l < d - (m + 1); l++) {
+                        sub.clear();
+                        sub2.clear();
+                        for (unsigned int n = 0; n < b[m][l].size(); n++) {
+                            for (unsigned int o = 0; o < b[m][l][n].size(); o++) {
+                                sub2.push_back(b[m][l][n][o]);
+                            }
+                            sub2.push_back(l);
+                            sub.push_back(sub2);
+                            sub2.clear();
+                        }
+                        sub2.clear();
+                        for (unsigned int n = 0; n < b[m][l + 1].size(); n++) {
+                            for (unsigned int o = 0; o < b[m][l + 1][n].size(); o++) {
+                                sub2.push_back(b[m][l + 1][n][o]);
+                            }
+                            sub2.push_back(-(l + m + 3));
+                            sub.push_back(sub2);
+                            sub2.clear();
+                        }
+                        b[m + 1].push_back(sub);
+                    }
+                }
+                std::vector<std::vector<int>> cL = b[d - 1][0];
+                std::vector<double> gFinal;
+                for (int l = 0; l < d + 1; l++) {
+                    gFinal.push_back(0);
+                }
+                for (unsigned int l = 0; l < cL.size(); l++) {
+                    sub3.clear();
+                    sub3.push_back(1);
+                    poly prod = poly(sub3);
+                    for (unsigned int m = 0; m < cL[l].size(); m++) {
+                        sub3.clear();
+                        if (cL[l][m] < -1)
+                            sub3.push_back(-1);
+                        else
+                            sub3.push_back(1);
+                        sub3.push_back(-cL[l][m]);
+                        prod *= poly(sub3);
+                    }
+                    for (unsigned int m = 0; m < prod.c.size(); m++) {
+                        gFinal[m] += prod.c[m];
+                    }
+                }
+                poly(gFinal).horShift(k-d);
+                pol2 = poly(gFinal).horShift(k-d);
+                for (unsigned int l = 0; l < pol2.c.size(); l++) {
+                    pol2.c[l] *= (points2[k + i] / fact(d));
+                }
+                for (int l = 0; l < d + 1; l++) {
+                    pol.c[l] += pol2.c[l];
+                }
+            }
+            pols.push_back(pol);
+        }
+        expr fx = expr(std::vector<expNode>({ expNode(pols[0], NONE_FUNC, false) }));
+        expr fy = expr(std::vector<expNode>({ expNode(pols[1], NONE_FUNC, false) }));
+        final.push_back(para(fx, fy));
+    }
+    return final;
+}
 
 /*
 * sinusoid - Creates a sinsuoid(circle, arc, or spiral) based on the radius and degree values.
@@ -2144,7 +2419,7 @@ para singleWarp(para b, para l, point scope, point offset) {
     expr sy = (l.y+offset.y)/scope.y;
     para db = b.derive();
     para final = para(comp(b.x, sx)+sy*comp(db.y, sx),
-                      comp(b.y, sx)-sy*comp(db.y, sx)
+                      comp(b.y, sx)-sy*comp(db.x, sx)
                      );
     final.optimize();
     return final;
@@ -2169,7 +2444,7 @@ para doubleWarp(para b1, para b2, para l, point scope, point offset){
     expr compb1x=comp(b1.x, sx);
     expr compb1y=comp(b1.y, sx);
     para final = para((comp(b2.x, sx)-compb1x)*sy+compb1x,
-                      (compb1y-comp(b2.y, sx))*sy+compb1y);
+                      (comp(b2.y, sx)-compb1y)*sy+compb1y);
     final.optimize();
     return final;
 }
@@ -2420,13 +2695,23 @@ struct prism {
     double perimeter = 0;
     point center;
     bounds limits = bounds(0, 0, 0, 0);
+    bool configured = false;
     std::vector<fillSquare> squares;
     std::vector<point> pointCache;
     std::vector<std::vector<int>> triangleInds;
     std::vector<std::vector<point>> trianglePoints;
     prism() {};
-    prism(std::vector<para> s) : sides(rearrange(s)) {
-        if (sides.size()) { // Upon construction, the vector of parametric curves is checked to determine if the make an enclosure. If they cannot, an empty vector is returned and contstuction is skipped.
+    prism(std::vector<para> s) : sides(rearrange(s)) {config();} // By default, an array of curves is rearranged before configuration.
+    prism(std::vector<para> s, bool r) : sides(s) { // In special cases, an array of curves may be rearranged before its used to construct a prism. An additional bool r is used to bypass the rearrange function.
+        if(r)
+            s = rearrange(s);
+        config();
+    }
+
+    // config - Configuration function that runs every time a prism is constructed.
+    void config() {
+        if (sides.size() and !configured) { // Upon construction, the vector of parametric curves is checked to determine if the make an enclosure. If they cannot, an empty vector is returned and contstuction is skipped.
+            configured = true;
             double direcInd = 0;
             double jointAngle = 0;
             limits = bounds(sides[0].mainPoints[0].x, sides[0].mainPoints[0].y, sides[0].mainPoints[0].x, sides[0].mainPoints[0].y);
@@ -2444,7 +2729,7 @@ struct prism {
                     point ddsp = midpoint(sides[i].doubleDerivPoints[j], sides[i].doubleDerivPoints[j + 1]);
                     double mag = sides[i].positions[j + 1] - sides[i].positions[j];
                     if (pow(dsp.x, 2) + pow(dsp.y, 2) > 0)
-                        direcInd += (dsp.x * ddsp.y - dsp.y * ddsp.x) / (pow(dsp.x, 2) + pow(dsp.y, 2)) * mag; // Direction is calculated by finding the integral of the derivative of the arctangent of the quotient of the y derivative and z derivatives.
+                        direcInd += (dsp.x * ddsp.y - dsp.y * ddsp.x) / (pow(dsp.x, 2) + pow(dsp.y, 2)) * mag; // Direction is calculated by finding the integral of the derivative of the arctangent of the quotient of the x derivative and y derivative.
                     area += (sp.x * dsp.y - sp.y * dsp.x) / 2 * mag; // Area is caculated using Green's Theorem. Found entirely by accident.
                     centX += sp.x * mag; // Center is calcluated by the(estimated) integral of each side divided by the amount of sides.
                     centY += sp.y * mag;
@@ -2495,7 +2780,7 @@ struct prism {
     }
 
     // inside - Takes a point and returns true if it lies within the prism. ins is used to reverse the output.
-    bool inside(point p, bool ins) {
+    bool inside(point p) {
         double final = 0;
         double lDist = 100;
         for (int i = 0; i < sides.size(); i++) {
@@ -2514,7 +2799,7 @@ struct prism {
         final = round(final / (2 * pi)) * direction;
         if (lDist < pow(10, -6)) // Special case where the test point is neglibigly close to a cached point. Returns true regardless of the ins bool.
             return true;
-        return ((ins && final >= 1) || (!ins && final <= 0)); // Upon integration, the result will return 2*pi if the point is in the prism and 0 if the point is out.
+        return final; // Upon integration, the result will return 2*pi if the point is in the prism and 0 if the point is out.
     };
 
     // checkBlock - Takes a fillSquare and checks the points inside of it to confirm if they are in the prism. Returns an array of fillSquares if the inital fillSquare size is greater than 1.
@@ -2522,7 +2807,7 @@ struct prism {
         std::vector<fillSquare> final;
         if (b.s > 1) {
             // As long as the inital fillSquare size is greater than 1, an array of 4 fillSquares will be returned, each with a size half of the original.
-            std::vector<bool> allPoints = std::vector<bool>({ b.c[0],inside(point(b.pos.x - b.s / 2,b.pos.y), true),b.c[1],inside(point(b.pos.x,b.pos.y - b.s / 2), true),inside(b.pos, true),inside(point(b.pos.x,b.pos.y + b.s / 2),true),b.c[2],inside(point(b.pos.x + b.s / 2,b.pos.y), true),b.c[3] });
+            std::vector<bool> allPoints = std::vector<bool>({ b.c[0],inside(point(b.pos.x - b.s / 2,b.pos.y)),b.c[1],inside(point(b.pos.x,b.pos.y - b.s / 2)),inside(b.pos),inside(point(b.pos.x,b.pos.y + b.s / 2)),b.c[2],inside(point(b.pos.x + b.s / 2,b.pos.y)),b.c[3] });
             for (int i = 0; i < 4; i++) {
                 fsTypes sub = FS_CHECK;
                 if ((allPoints[i % 2 + floor(i / 2) * 3] and allPoints[(i % 2 + floor(i / 2) * 3) + 1] and allPoints[(i % 2 + floor(i / 2) * 3) + 3] and allPoints[(i % 2 + floor(i / 2) * 3) + 4]) or (!allPoints[i % 2 + floor(i / 2) * 3] and !allPoints[(i % 2 + floor(i / 2) * 3) + 1] and !allPoints[(i % 2 + floor(i / 2) * 3) + 3] and !allPoints[(i % 2 + floor(i / 2) * 3) + 4])) {
@@ -2548,7 +2833,7 @@ struct prism {
             }
         }
         else{
-            if(inside(b.pos,true))
+            if(inside(b.pos))
                 final.push_back(fillSquare(b.pos,1,std::vector<bool>({0,0,0,0}),FS_IN));
         }
         return final;
@@ -2564,7 +2849,7 @@ struct prism {
         for (int i = 0; i <= (roundBounds.maxX - roundBounds.minX) / startSize; i++) {
             points.push_back(std::vector<bool>({}));
             for (int j = 0; j <= (roundBounds.maxY - roundBounds.minY) / startSize; j++) {
-                points[i].push_back(inside(point(i * startSize + roundBounds.minX, j * startSize + roundBounds.minY), true));
+                points[i].push_back(inside(point(i * startSize + roundBounds.minX, j * startSize + roundBounds.minY)));
                 if (i && j)
                     tBlocks.push_back(fillSquare(point((i - 0.5) * startSize + roundBounds.minX, (j - 0.5) * startSize + roundBounds.minY), startSize, std::vector<bool>({ points[i - 1][j - 1], points[i - 1][j], points[i][j - 1], points[i][j] }), FS_CHECK)); // Array of test blocks starts off using the maximum size.
             }
@@ -2591,32 +2876,10 @@ struct prism {
                 for(int k=0;k<sub2.size();k++)
                     splits.push_back(sub2[k].prog1);
             }
-            std::vector<double> sortSplits = std::vector<double>({0}); // Sorts the intersections from least to greatest.
-            int count=0;
-            double lowestInd=0;
-            double lowestVal=0;
-            if(splits.size())
-                lowestVal = splits[0];
-            while(splits.size()){
-                if(splits[count] < lowestVal){
-                    lowestInd=count;
-                    lowestVal=splits[count];
-                }
-                count++;
-                if(count == splits.size()){
-                    sortSplits.push_back(splits[lowestInd]);
-                    splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
-                    if(splits.size()){
-                        count=0;
-                        lowestInd=0;
-                        lowestVal=splits[0];
-                    }
-                }
-            }
-            sortSplits.push_back(1);
+            std::vector<double> sortSplits = sortSplit(splits); // Sorts the intersections from least to greatest.
             for(int j=0;j<sortSplits.size()-1;j++){
                 point sub3=sub[i]((sortSplits[j]+sortSplits[j+1])/2); // For each curve in the curve set, the midpoint of each split piece is taken and checked if it lies in the inside of the prism. If the midpoint in inside, so is the piece.
-                if(inside(sub3, true))
+                if(inside(sub3))
                     final.push_back(sub[i].slice(sortSplits[j],sortSplits[j+1]));
             }
         }
@@ -2634,7 +2897,7 @@ struct prism {
                 }
             }
             if(!final&&!((p1 == (p2+1)%pointCache.size())||(p2 == (p1+1)%pointCache.size()))) // If there are no intersections and the points are not adjacent to each other, the midpoint of the line is taken and checked to see if its inside the prism.
-                final=!inside(midpoint(pointCache[p1],pointCache[p2]),true);
+                final=!inside(midpoint(pointCache[p1],pointCache[p2]));
         }
         return final;
     }
@@ -2772,13 +3035,28 @@ std::vector<prism> rearrangePrime(std::vector<para> ipl) {
                 else
                     final[final.size()-1].push_back(pl[inds[i]].slice(1, 0));
             }
-            finalP.push_back(prism(final[final.size()-1]));
+            finalP.push_back(prism(final[final.size()-1], false));
             std::vector<int> sortInds = sortVec(inds);
             for(int i=inds.size()-1;i>-1;i--)
                 pl.erase(pl.begin()+sortInds[i],pl.begin()+sortInds[i]+1);
         }
     }
     return finalP;
+};
+
+/*
+* region - Represents a group of prisms that can have a special definition of insideness depending on how they overlap.
+*/
+struct region{
+    std::vector<prism> zones;
+    region(std::vector<prism> z): zones(z){}
+    region(std::vector<para> p): zones(rearrangePrime(p)){}
+    int inside(point p){ // Determines how many of the zone prisms the point lies inside in.
+        int final=0;
+        for(int i=0;i<zones.size();i++)
+            final += zones[i].inside(p);
+        return final;
+    }
 };
 
 // Represents a type of prism cross, either union or intersection.
@@ -2790,14 +3068,14 @@ enum prismCrossTypes{
 /*
 * prismCross - Takes two prisms and crosses them. Can return either the union or the intersection between the two.
 */
-std::vector<prism> prismCross(prism p1, prism p2, prismCrossTypes type){
+region prismCross(prism p1, prism p2, prismCrossTypes type){
     std::vector<std::vector<double>> inters1;
     for(int i=0;i<p1.sides.size();i++)
         inters1.push_back(std::vector<double>({}));
     std::vector<std::vector<double>> inters2;
     for(int i=0;i<p2.sides.size();i++)
         inters2.push_back(std::vector<double>({}));
-    for(int i=0;i<p1.sides.size();i++){
+    for(int i=0;i<p1.sides.size();i++){ // Finds all the intersections between the sides of the prisms.
         for(int j=0;j<p2.sides.size();j++){
             std::vector<intersection> sub = findInters(p1.sides[i],p2.sides[j]);
             for(int k=0;k<sub.size();k++){
@@ -2806,36 +3084,26 @@ std::vector<prism> prismCross(prism p1, prism p2, prismCrossTypes type){
             }
         }
     }
-    std::vector<std::vector<double>> split1;
-    for(int i=0;i<inters1.size();i++){
-        split1.push_back(std::vector<double>({0}));
-        std::vector<double> sortInts = sortVec(inters1[i]);
-        for(int j=0;j<sortInts.size();j++)
-            split1[i].push_back(sortInts[j]);
-        split1[i].push_back(1);
-    }
+    std::vector<std::vector<double>> split1; // Sorts each group of intersections.
+    for(int i=0;i<inters1.size();i++)
+        split1.push_back(sortSplit(inters1[i]));
     std::vector<std::vector<double>> split2;
-    for(int i=0;i<inters2.size();i++){
-        split2.push_back(std::vector<double>({0}));
-        std::vector<double> sortInts = sortVec(inters2[i]);
-        for(int j=0;j<sortInts.size();j++)
-            split2[i].push_back(sortInts[j]);
-        split2[i].push_back(1);
-    }
+    for(int i=0;i<inters2.size();i++)
+        split2.push_back(sortSplit(inters2[i]));
     std::vector<para> final;
-    for(int i=0;i<split1.size();i++){
+    for(int i=0;i<split1.size();i++){ // Depending on the type of cross, sides are selected for the final region.
         for(int j=0;j<split1[i].size()-1;j++){
-            if(p2.inside(p1.sides[i]((split1[i][j]+split1[i][j+1])/2),true) != bool(type))
+            if(p2.inside(p1.sides[i]((split1[i][j]+split1[i][j+1])/2)) != bool(type))
                 final.push_back(p1.sides[i].slice(split1[i][j],split1[i][j+1]));
         }
     }
     for(int i=0;i<split2.size();i++){
         for(int j=0;j<split2[i].size()-1;j++){
-            if(p1.inside(p2.sides[i]((split2[i][j]+split2[i][j+1])/2),true) != bool(type))
+            if(p1.inside(p2.sides[i]((split2[i][j]+split2[i][j+1])/2)) != bool(type))
                 final.push_back(p2.sides[i].slice(split2[i][j],split2[i][j+1]));
         }
     }
-    return rearrangePrime(final);
+    return final;
 }
 
 /*
@@ -2870,30 +3138,7 @@ std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point of
         allSwitch.push_back(diffY1.zeros[i]);
     for(int i=0;i<diffY2.zeros.size();i++)
         allSwitch.push_back(diffY2.zeros[i]);
-    std::vector<double> sortSwitch = std::vector<double>({0});
-    int lowestInd=0;
-    double lowestVal=0;
-    int count=0;
-    if(allSwitch.size()){
-        lowestVal=allSwitch[0];
-        while(allSwitch.size()){
-            if(allSwitch[count] < lowestVal){
-                lowestVal = allSwitch[count];
-                lowestInd = count;
-            }
-            count++;
-            if(count == allSwitch.size()){
-                sortSwitch.push_back(lowestVal);
-                allSwitch.erase(allSwitch.begin()+lowestInd,allSwitch.begin()+lowestInd+1);
-                count = 0;
-                if(allSwitch.size()){
-                    lowestInd=0;
-                    lowestVal=allSwitch[0];
-                }
-            }
-        }
-    }
-    sortSwitch.push_back(1);
+    std::vector<double> sortSwitch = sortSplit(allSwitch);
     point tpX;
     point tpY;
     expr mX;
@@ -2976,32 +3221,10 @@ std::vector<para> pointSlopeWarp(para bx, para by, para c, point scope, point of
             if(tp.x >= limits.minX && tp.x <= limits.maxX)
                 prospSplit.push_back(testY2.zeros[j]);
         }
-        std::vector<double> sortSplit = std::vector<double>({0});
-        int lowestInd=0;
-        double lowestVal=0;
-        if(prospSplit.size())
-            lowestVal = prospSplit[0];
-        int count=0;
-        while(prospSplit.size()){
-            if(prospSplit[count] < lowestVal){
-                lowestVal = prospSplit[count];
-                lowestInd = count;
-            }
-            count++;
-            if(count == prospSplit.size()){
-                sortSplit.push_back(lowestVal);
-                prospSplit.erase(prospSplit.begin()+lowestInd,prospSplit.begin()+lowestInd+1);
-                count = 0;
-                if(prospSplit.size()){
-                    lowestInd=0;
-                    lowestVal = prospSplit[0];
-                }
-            }
-        }
-        sortSplit.push_back(1);
-        for(int j=0;j<sortSplit.size()-1;j++){
-            if(limits.within(rawCurves[i]((sortSplit[j]+sortSplit[j+1])/2)))
-                final.push_back(rawCurves[i].slice(sortSplit[j],sortSplit[j+1]));
+        std::vector<double> sortSplits = sortSplit(prospSplit);
+        for(int j=0;j<sortSplits.size()-1;j++){
+            if(limits.within(rawCurves[i]((sortSplits[j]+sortSplits[j+1])/2)))
+                final.push_back(rawCurves[i].slice(sortSplits[j],sortSplits[j+1]));
         }
     }
     return final;
@@ -3039,7 +3262,7 @@ std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
         double degOff=atan((p2.y-p1.y-(p2.x-p1.x)*cos(o)/sin(o))/(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))*180/pi+90*((p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o))/abs(p2.x-p1.x+(p2.y-p1.y)*cos(o)/sin(o)))+90;
         double degAmt=2*(pi-o)*180/pi;
         double step = 360/degAmt;
-        std::vector<double> splits = std::vector<double>({0});
+        std::vector<double> splits;
         if((limits.minX-cent.x)/rad >= -1 and (limits.minX-cent.x)/rad <= 1){
             double sampleDeg1=(acos((limits.minX-cent.x)/rad)*180/pi-degOff)/degAmt;
             if((step > 0 && (ceil(-sampleDeg1/step) == floor((1-sampleDeg1)/step))))
@@ -3088,31 +3311,11 @@ std::vector<para> circPoints(std::vector<point> pl, double an, bounds limits){
             if((step < 0 && (floor(-sampleDeg2/step) == ceil((1-sampleDeg2)/step))))
                 splits.push_back(sampleDeg2+floor(-sampleDeg2/step)*step);
         }
-        splits.push_back(1);
-        std::vector<double> sortSplit;
-        int lowestInd=0;
-        double lowestVal=splits[0];
-        int count=0;
-        while(splits.size()){
-            if(splits[count] < lowestVal){
-                lowestInd = count;
-                lowestVal = splits[count];
-            }
-            count++;
-            if(count == splits.size()){
-                sortSplit.push_back(lowestVal);
-                splits.erase(splits.begin()+lowestInd,splits.begin()+lowestInd+1);
-                count = 0;
-                if(splits.size()){
-                    lowestInd=0;
-                    lowestVal=splits[0];
-                }
-            }
-        }
+        std::vector<double> sortSplits = sortSplit(splits);
         para test = sinusoid(cent,rad,rad,degOff,degAmt);
-        for(int j=0;j<sortSplit.size()-1;j++){
-            if(limits.within(test((sortSplit[j]+sortSplit[j+1])/2)))
-                final.push_back(test.slice(sortSplit[j],sortSplit[j+1]));
+        for(int j=0;j<sortSplits.size()-1;j++){
+            if(limits.within(test((sortSplits[j]+sortSplits[j+1])/2)))
+                final.push_back(test.slice(sortSplits[j],sortSplits[j+1]));
         }
         ca=2*angleVector(p1,p2)-ca;
         if(ca<0){ca+=2*pi;}
@@ -3153,190 +3356,395 @@ std::vector<para> circPoints(std::vector<point> pl, double an, prism limits){
 */
 enum stringFuncs{
     NONE_SF,
-    BEZIER,
-    SINUSOID,
-    COMPCURVE,
-    TRANSFORM,
-    EXTEND,
-    TANGENT,
+    BEZIER, // be
+    BSPLINE, // bs
+    SINUSOID, // si
+    COMPCURVE, // co
+    TRANSFORM, // tr
+    EXTEND, // ex
+    TANGENT, // ta
+    SWARP, // sw
+    DWARP, // dw
+    QWARP, // qw
+    INTERSECTION, // in
+    PRISM, // pr
+    PSWARP, // ps
+    CIRC, // ci
 };
 
 /*
-* stringNotation - Takes a raw string, parses it, and returns the resulting curves. Currently unfinished.
+* snCache - Structure that is used to store the data from a stringNotation parse.
 */
-std::vector<std::vector<para>> stringNotation(std::string s){
+struct snCache{
+    std::vector<std::vector<para>> curves;
+    std::vector<prism> prisms;
+    snCache(){}
+    snCache(std::vector<std::vector<para>> c, std::vector<prism> p): curves(c), prisms(p) {}
+};
+
+/*
+* stringNotation - Takes a raw string, parses it, and returns the resulting curves and prisms in the form of a snCache.
+*/
+snCache stringNotation(std::string s){
     std::string vh="";
     stringFuncs func=NONE_SF;
-    int valCount=0;
-    point sampPoint;
-    std::vector<point> sampPointVec;
-    std::vector<std::vector<para>> final;
-    std::vector<double> valStoreDoub;
-    std::vector<int> valStoreInt;
+    std::vector<std::vector<para>> finalC;
+    std::vector<prism> finalP;
+    std::vector<std::vector<double>> valStore;
+    int valCount = 0;
+    std::vector<point> valStorePoint;
     std::vector<para> valStorePara;
     transformType sampTransform;
     std::vector<transformNode> valStoreTN;
+    std::vector<intersection> valStoreInter;
+    std::vector<intersection> valStoreInter2;
+    bool read = true;
     for(int i=0;i<s.size();i++){
-        switch(func){
-        case BEZIER:
-            if(s[i] == ','){
-                valCount++;
-                if(valCount%2)
-                    sampPoint.x=str2Doub(vh);
-                else{
-                    sampPoint.y=str2Doub(vh);
-                    sampPointVec.push_back(sampPoint);
-                }
+        if(s[i] == '[')
+            read = false;
+        if(read){
+            if(s[i] == '\n')
                 vh = "";
-            }
-            else if(s[i] == ';'){
-                sampPoint.y=str2Doub(vh);
-                sampPointVec.push_back(sampPoint);
-                final.push_back(std::vector<para>({bez(sampPointVec)}));
-                sampPointVec.clear();
-                valCount=0;
-                vh = "";
-                func = NONE_SF;
-            }
-            else
-                vh += s[i];
-            break;
-        case SINUSOID:
-            if(s[i] == ','){
-                valStoreDoub.push_back(str2Doub(vh));
-                vh = "";
-            }
-            else if(s[i] == ';'){
-                valStoreDoub.push_back(str2Doub(vh));
-                final.push_back(std::vector<para>({sinusoid(point(valStoreDoub[0],valStoreDoub[1]),valStoreDoub[2],valStoreDoub[3],valStoreDoub[4],valStoreDoub[5])}));
-                valStoreDoub.clear();
-                vh = "";
-                func = NONE_SF;
-            }
-            else
-                vh += s[i];
-            break;
-        case COMPCURVE:
-            if(s[i] == ','){
-                valStoreInt.push_back(str2Int(vh));
-                vh = "";
-            }
-            else if(s[i] == ';'){
-                valStoreInt.push_back(str2Int(vh));
-                final.push_back(std::vector<para>({compCurve(final[valStoreInt[0]][valStoreInt[1]],final[valStoreInt[2]][valStoreInt[3]])}));
-                valStoreInt.clear();
-                vh = "";
-                func = NONE_SF;
-            }
-            else
-                vh += s[i];
-            break;
-        case TRANSFORM:
-            if(s[i] == ','){
-                if(valCount == 0 || valCount == 1)
-                    valStoreInt.push_back(str2Int(vh));
-                else if(valCount == 2)
-                    valStoreDoub.push_back(str2Doub(vh));
+            else if(s[i] == ',' || s[i] == ';'){
+                valStore[valStore.size()-1].push_back(str2Doub(vh));
                 vh = "";
             }
             else if(s[i] == '|'){
-                if(valCount == 0){
-                    valStoreInt.push_back(str2Int(vh));
-                    for(int j=0;j<valStoreInt.size();j+=2)
-                        valStorePara.push_back(final[valStoreInt[j]][valStoreInt[j+1]]);
-                    valStoreInt.clear();
-                }
-                if(valCount == 1)
-                    valStoreInt.push_back(str2Int(vh));
-                valCount++;
+                valStore[valStore.size()-1].push_back(str2Doub(vh));
+                valStore.push_back(std::vector<double>({}));
+                vh = "";
             }
-            else if(s[i] == ';'){
-                valStoreDoub.push_back(str2Doub(vh));
-                valCount = 0;
-                for(int j=0;j<valStoreInt.size();j++){
-                    if(valStoreInt[j] == 0 || valStoreInt[j] == 2){
-                        valStoreTN.push_back(transformNode(transformType(valStoreInt[valCount]),valStoreDoub[valCount],valStoreDoub[valCount+1]));
-                        valCount += 2;
+            else
+                vh += s[i];
+            if(func == NONE_SF and vh.size() == 2){
+                if(vh == "be")
+                    func = BEZIER;
+                else if(vh == "bs")
+                    func = BSPLINE;
+                else if(vh == "si")
+                    func = SINUSOID;
+                else if(vh == "co")
+                    func = COMPCURVE;
+                else if(vh == "tr")
+                    func = TRANSFORM;
+                else if(vh == "ex")
+                    func = EXTEND;
+                else if(vh == "ta")
+                    func = TANGENT;
+                else if(vh == "sw")
+                    func = SWARP;
+                else if(vh == "dw")
+                    func = DWARP;
+                else if(vh == "qw")
+                    func = QWARP;
+                else if(vh == "in")
+                    func = INTERSECTION;
+                else if(vh == "pr")
+                    func = PRISM;
+                else if(vh == "ps")
+                    func = PSWARP;
+                else if(vh == "ci")
+                    func = CIRC;
+                valStore.clear();
+                valStore.push_back(std::vector<double>({}));
+                vh = "";
+                }
+            if(s[i] == ';'){
+                if(func == BEZIER or func == BSPLINE or func == CIRC){
+                    for(int j=0;j<valStore[0].size();j+=2)
+                        valStorePoint.push_back(point(valStore[0][j],valStore[0][j+1]));
+                }
+                if(func == TRANSFORM or func == PRISM){
+                    for(int j=0;j<valStore[0].size();j+=2)
+                        valStorePara.push_back(finalC[valStore[0][j]][valStore[0][j+1]]);
+                }
+                if(func == SWARP or func == DWARP or func == QWARP or func == PSWARP){
+                    for(int j=0;j<valStore[1].size();j+=2)
+                        valStorePara.push_back(finalC[valStore[1][j]][valStore[1][j+1]]);
+                }
+                switch(func){
+                case BEZIER:
+                    finalC.push_back(std::vector<para>({bez(valStorePoint)}));
+                    valStorePoint.clear();
+                    break;
+                case BSPLINE:
+                    finalC.push_back(std::vector<para>({bSpline(valStorePoint,valStore[1][0],valStore[1][1])}));
+                    valStorePoint.clear();
+                    break;
+                case SINUSOID:
+                    finalC.push_back(std::vector<para>({sinusoid(point(valStore[0][0],valStore[0][1]),valStore[0][2],valStore[0][3],valStore[0][4],valStore[0][5])}));
+                    break;
+                case COMPCURVE:
+                    finalC.push_back(std::vector<para>({compCurve(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]])}));
+                    break;
+                case TRANSFORM:
+                    valCount = 0;
+                    for(int j=0;j<valStore[1].size();j++){
+                        if(valStore[1][j] == 0 || valStore[1][j] == 2){
+                            valStoreTN.push_back(transformNode(transformType(valStore[1][j]),valStore[2][valCount],valStore[2][valCount+1]));
+                            valCount += 2;
+                        }
+                        else if (valStore[1][j] == 1){
+                            valStoreTN.push_back(transformNode(valStore[2][valCount]));
+                            valCount++;
+                        }
+                        else if (valStore[1][j] == 3 || valStore[1][j] == 5){
+                            valStoreTN.push_back(transformNode(transformType(valStore[1][j]),finalC[valStore[2][valCount]][valStore[2][valCount+1]].x,finalC[valStore[2][valCount+2]][valStore[2][valCount+3]].y));
+                            valCount += 4;
+                        }
+                        else if (valStore[1][j] == 4){
+                            if(valStore[2][valCount+2])
+                                valStoreTN.push_back(transformNode(finalC[valStore[2][valCount]][valStore[2][valCount+1]].y));
+                            else
+                                valStoreTN.push_back(transformNode(finalC[valStore[2][valCount]][valStore[2][valCount+1]].x));
+                            valCount += 3;
+                        }
                     }
-                    else if (valStoreInt[j] == 1){
-                        valStoreTN.push_back(transformNode(valStoreDoub[valCount]));
-                        valCount++;
-                    }
-                    else if (valStoreInt[j] == 3 || valStoreInt[j] == 5){
-                        valStoreTN.push_back(transformNode(transformType(valStoreInt[valCount]),final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].x,final[int(valStoreDoub[valCount+2])][int(valStoreDoub[valCount+3])].y));
-                        valCount += 4;
-                    }
-                    else if (valStoreInt[j] == 4){
-                        if(valStoreDoub[valCount+2])
-                            valStoreTN.push_back(transformNode(final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].y));
+                    finalC.push_back(transform(valStorePara,valStoreTN));
+                    valStorePara.clear();
+                    valStoreTN.clear();
+                    break;
+                case EXTEND:
+                    if(valStore[0].size() == 3)
+                        finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2])}));
+                    if(valStore[0].size() == 4)
+                        finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2],valStore[0][3])}));
+                    if(valStore[0].size() == 7){
+                        if(valStore[0][4])
+                            finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]].y,quickTransform(valStore[0][5],valStore[0][6]))}));
                         else
-                            valStoreTN.push_back(transformNode(final[int(valStoreDoub[valCount])][int(valStoreDoub[valCount+1])].x));
-                        valCount += 3;
+                            finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]].x,quickTransform(valStore[0][5],valStore[0][6]))}));
                     }
-                }
-                final.push_back(transform(valStorePara,valStoreTN));
-                valStorePara.clear();
-                valStoreTN.clear();
-                valStoreInt.clear();
-                valStoreDoub.clear();
-                vh = "";
-                func = NONE_SF;
-            }
-            else
-                vh += s[i];
-            break;
-        case EXTEND:
-            if(s[i] == ','){
-                valStoreDoub.push_back(str2Doub(vh));
-                vh = "";
-            }
-            else if(s[i] == ';'){
-                valStoreDoub.push_back(str2Doub(vh));
-                if(valStoreDoub.size() == 3)
-                    final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2])}));
-                if(valStoreDoub.size() == 4)
-                    final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2],valStoreDoub[3])}));
-                if(valStoreDoub.size() == 7){
-                    if(valStoreDoub[4])
-                        final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],final[int(valStoreDoub[2])][int(valStoreDoub[3])].y,quickTransform(valStoreDoub[5],valStoreDoub[6]))}));
+                    break;
+                case TANGENT:
+                    finalC.push_back(std::vector<para>({tangent(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2],finalC[valStore[0][3]][valStore[0][4]],valStore[0][5])}));
+                    break;
+                case SWARP:
+                    finalC.push_back(std::vector<para>({singleWarp(finalC[valStore[0][0]][valStore[0][1]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
+                    valStorePara.clear();
+                    break;
+                case DWARP:
+                    finalC.push_back(std::vector<para>({doubleWarp(valStore[0][2] ? finalC[valStore[0][0]][valStore[0][1]].slice(1,0) : finalC[valStore[0][0]][valStore[0][1]],valStore[0][5] ? finalC[valStore[0][3]][valStore[0][4]].slice(1,0) : finalC[valStore[0][3]][valStore[0][4]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
+                    valStorePara.clear();
+                    break;
+                case QWARP:
+                    finalC.push_back(std::vector<para>({quadWarp(valStore[0][2] ? finalC[valStore[0][0]][valStore[0][1]].slice(1,0) : finalC[valStore[0][0]][valStore[0][1]],valStore[0][5] ? finalC[valStore[0][3]][valStore[0][4]].slice(1,0) : finalC[valStore[0][3]][valStore[0][4]],valStore[0][8] ? finalC[valStore[0][6]][valStore[0][7]].slice(1,0) : finalC[valStore[0][6]][valStore[0][7]],valStore[0][11] ? finalC[valStore[0][9]][valStore[0][10]].slice(1,0) : finalC[valStore[0][9]][valStore[0][10]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
+                    valStorePara.clear();
+                    break;
+                case INTERSECTION:
+                    if(valStore[0].size() == 6){
+                        valStoreInter = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]]);
+                        if(valStore[0][5] == 1)
+                            finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(valStoreInter[valStore[0][4]].prog1,1)}));
+                        else
+                            finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(0,valStoreInter[valStore[0][4]].prog1)}));
+                    }
+                    if(valStore[0].size() == 8){
+                        valStoreInter = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]]);
+                        valStoreInter2 = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][5]][valStore[0][6]]);
+                        finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(valStoreInter[valStore[0][4]].prog1,valStoreInter2[valStore[0][7]].prog1)}));
+                        valStoreInter2.clear();
+                    }
+                    valStoreInter.clear();
+                    break;
+                case PRISM:
+                    finalP.push_back(prism(valStorePara));
+                    break;
+                case PSWARP:
+                    if(valStore[3].size() == 4)
+                        finalC.push_back(pointSlopeWarp(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]),bounds(valStore[3][0],valStore[3][1],valStore[3][2],valStore[3][3])));
                     else
-                        final.push_back(std::vector<para>({extend(final[int(valStoreDoub[0])][int(valStoreDoub[1])],final[int(valStoreDoub[2])][int(valStoreDoub[3])].x,quickTransform(valStoreDoub[5],valStoreDoub[6]))}));
+                        finalC.push_back(pointSlopeWarp(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]),finalP[valStore[3][0]]));
+                    break;
+                case CIRC:
+                    if(valStore[2].size() == 4)
+                        finalC.push_back(circPoints(valStorePoint,valStore[1][0],bounds(valStore[2][0],valStore[2][1],valStore[2][2],valStore[2][3])));
+                    else
+                        finalC.push_back(circPoints(valStorePoint,valStore[1][0],finalP[valStore[2][0]]));
+                    break;
                 }
-                valStoreDoub.clear();
-                vh = "";
+                if(func == BEZIER or func == BSPLINE or func == CIRC)
+                    valStorePoint.clear();
+                if(func == TRANSFORM or func == SWARP or func == DWARP or func == QWARP or func == PRISM or func == PSWARP)
+                    valStorePara.clear();
                 func = NONE_SF;
             }
-            else
-                vh += s[i];
-            break;
-        case TANGENT:
-            if(s[i] == ','){
-                valStoreDoub.push_back(str2Doub(vh));
-                vh = "";
-            }
-            else if(s[i] == ';'){
-                valStoreDoub.push_back(str2Doub(vh));
-                final.push_back(std::vector<para>({tangent(final[int(valStoreDoub[0])][int(valStoreDoub[1])],valStoreDoub[2],final[int(valStoreDoub[3])][int(valStoreDoub[4])],valStoreDoub[5])}));
-                valStoreDoub.clear();
-                vh = "";
-                func = NONE_SF;
-            }
-            else
-                vh += s[i];
-            break;
         }
-        if(s[i] == '!')
-            func = BEZIER;
-        if(s[i] == '@')
-            func = SINUSOID;
-        if(s[i] == '#')
-            func = COMPCURVE;
-        if(s[i] == '$')
-            func = TRANSFORM;
-        if(s[i] == '%')
-            func = EXTEND;
-        if(s[i] == '^')
-            func = TANGENT;
+        if(s[i] == ']')
+            read = true;
+    }
+    return snCache(finalC,finalP);
+}
+
+/*
+* traverse - Takes a curve that whose path only rotates in one direction(either clockwise or counter-clockwise) and finds points that create a specified deviant distance f.
+*/
+std::vector<double> traverse(para x, double f){
+    std::vector<double> final = std::vector<double>({0});
+    expr sub = x.devDist();
+    double tp = sub(1); // Since the expr object does not support absolute value evaluation, this precaution is taken depending on the sign of the maximum deviant distance.
+    while(final[final.size()-1] != 1){
+        sub -= tp/abs(tp)*f;
+        sub.analyze(); // After being transformed, the deviant distance function is analyzed. The first resulting zero will show the point at which the deviant distance reaches f.
+        if(sub.zeros.size()){
+            final.push_back(sub.zeros[0]*(1-final[final.size()-1])+final[final.size()-1]);
+            sub = x.slice(final[final.size()-1],1).devDist(); // Process continues with the function being sliced and re-analyzed. When there are no zeros, the end of the function has been reached.
+        }
+        else
+            final.push_back(1);
     }
     return final;
 }
+
+/*
+* fullTraverse - Takes a curve and fully traverses it, regardless of the direction of the rotation.
+*/
+std::vector<double> fullTraverse(para x, double f) {
+    x.configure();
+    std::vector<double> final;
+    if(!f)
+        return x.imt(1).pos;
+    if (x.constantAngle) // If the angle of the curve is constant, a simplified traversal can be represented by the initial and terminal points.
+        final = std::vector<double>({ 0,1 });
+    else {
+        expr angDer = x.angleDeriv();
+        angDer.analyze(); // Before the basic traversal function is called, the main curve is split up into segments that have the same rotation. The boundaries of these segments are denotated by the zeros of the angle derivative.
+        para dx = x.derive();
+        std::vector<double> allSep;
+        if (dx(0) == point(0, 0)) // Failsafe in the event of a zero division for the magnitude vector.
+            allSep.push_back(0.000001);
+        else
+            allSep.push_back(0);
+        for (unsigned int i = 0; i < angDer.zeros.size(); i++) {
+            if (!equal(angDer.zeros[i], allSep[allSep.size() - 1]) && !equal(angDer.zeros[i], 0) && !equal(angDer.zeros[i], 1))
+                allSep.push_back(angDer.zeros[i]);
+        }
+        bool nEnd = (dx(1) == point(0, 0));
+        if (nEnd)
+            allSep.push_back(0.999999);
+        else
+            allSep.push_back(1);
+        std::vector<para> allCurves;
+        for (unsigned int i = 0; i < allSep.size() - 1; i++)
+            allCurves.push_back(x.slice(allSep[i], allSep[i + 1]));
+        for (unsigned int i = 0; i < allCurves.size(); i++) {
+            std::vector<double> sub = traverse(allCurves[i], f); // Basic traversal is called on each piece of the main curve.
+            for (unsigned int j = 0; j < sub.size() - 1; j++)
+                final.push_back(sub[j] * (allSep[i + 1] - allSep[i]) + allSep[i]); // Each value is stored, factoring in the boundaries of
+        }
+        if (!equal(1, final[final.size() - 1])) {
+            if (nEnd)
+                final.push_back(0.999999);
+            else
+                final.push_back(1);
+        }
+    }
+    return final;
+}
+
+/*
+* morphSpec - Represents morph data used in rendering morphs in the GD editor.
+*/
+struct morphSpec {
+    double minDist = 0;
+    double maxDist = 0;
+    std::vector<std::vector<double>> crossPoints;
+    std::vector<double> rotAnchorVals;
+    std::vector<double> distAnchorVals;
+    morphSpec() {}
+    morphSpec(double id, double ad, std::vector<std::vector<double>> crpo, std::vector<double>rav, std::vector<double> dav) :minDist(id), maxDist(ad), rotAnchorVals(rav), distAnchorVals(dav), crossPoints(crpo) {}
+    void print() {
+        std::cout << minDist << " " << maxDist << "\n";
+        printVec(rotAnchorVals);
+        printVec(distAnchorVals);
+        std::cout << "\n";
+    }
+};
+
+/*
+* getDeg - An easy operation used to grab degree values during morph rendering.
+*/
+double getDeg(poly x, poly y, double t) {
+    double final = 0;
+    if(abs(x(t))){
+        final = atan(y(t) / x(t));
+        if (x(t) < 0)
+            final += pi;
+        else if (x(t) > 0 && y(t) < 0)
+            final += 2 * pi;
+    }
+    else {
+        if (y(t) > 0)
+            final = pi / 2;
+        else
+            final = 3 * pi / 2;
+    }
+    return final;
+}
+
+/*
+* morphRender - Renders a morph operation using specified intial, terminal, and velocity points, as well as a time value.
+*/
+morphSpec morphRender(point ip1, point ip2, point tp1, point tp2, point iv, point tv, double t) {
+    std::vector<double> valsX1 = cubicMap(ip1.x, tp1.x, iv.x, tv.x, t).c;
+    std::vector<double> valsY1 = cubicMap(ip1.y, tp1.y, iv.y, tv.y, t).c;
+    std::vector<double> valsX2 = cubicMap(ip2.x, tp2.x, iv.x, tv.x, t).c;
+    std::vector<double> valsY2 = cubicMap(ip2.y, tp2.y, iv.y, tv.y, t).c;
+    poly subX = poly(std::vector<double>({}));
+    poly subY = poly(std::vector<double>({}));
+    for (int i = 0; i < valsX1.size(); i++) {
+        subX.c.push_back(valsX2[i] - valsX1[i]);
+        subY.c.push_back(valsY2[i] - valsY1[i]);
+    }
+    expr dist = expr(std::vector<expNode>({
+        expNode(subX,NONE_FUNC,false),
+        expNode(subY,NONE_FUNC,false),
+        expNode(std::vector<std::vector<int>>({std::vector<int>({0,0}),std::vector<int>({1,1})}),SQRT,false),
+        }));
+    expr distDer = dist.derive();
+    expr angDer = expr(std::vector<expNode>({
+        expNode(subX,NONE_FUNC,false),
+        expNode(subY,NONE_FUNC,false),
+        expNode(subX.derive(),NONE_FUNC,true),
+        expNode(subY.derive(),NONE_FUNC,false),
+        expNode(std::vector<std::vector<int>>({std::vector<int>({3,0}),std::vector<int>({1,2})}),NONE_FUNC,false),
+        expNode(std::vector<std::vector<int>>({std::vector<int>({0,0}),std::vector<int>({1,1})}),NONE_FUNC,false),
+        expNode(std::vector<int>({4,5}),NONE_FUNC,false),
+        }));
+    
+    expr distDerRange = distDer.slice(0,t);
+    distDerRange.analyze();
+    double minDist = dist(0);
+    double maxDist = minDist;
+    for (int i = 0; i < distDerRange.zeros.size(); i++) {
+        minDist = (dist(distDerRange.zeros[i]) < minDist) ? dist(distDerRange.zeros[i]) : minDist;
+        maxDist = (dist(distDerRange.zeros[i]) > maxDist) ? dist(distDerRange.zeros[i]) : maxDist;
+    }
+    minDist = (dist(t) < minDist) ? dist(t) : minDist;
+    maxDist = (dist(t) > maxDist) ? dist(t) : maxDist;
+
+    expr exprY = expr(std::vector<expNode>({ expNode(subY,NONE_FUNC,false) }));
+    exprY.optimize();
+    expr exprYRange = exprY.slice(0,t);
+    exprYRange.analyze();
+    std::vector<double> yPoints = exprYRange.zeros;
+    piecewise dOff;
+    double cdOff = 0;
+    std::vector<std::vector<double>> crossPoints;
+    for (int i = 0; i < yPoints.size(); i++) {
+        if (subX(yPoints[i]) > 0) {
+            crossPoints.push_back(std::vector<double>({ yPoints[i],angDer(yPoints[i]) / abs(angDer(yPoints[i])) }));
+            dOff.pieces.push_back(expr(std::vector<expNode>({ expNode(cdOff) })));
+            dOff.timeSplit.push_back(yPoints[i]);
+            if(abs(angDer(yPoints[i])))
+                cdOff += 2 * pi * angDer(yPoints[i]) / abs(angDer(yPoints[i]));
+        }
+    }
+    dOff.pieces.push_back(expr(std::vector<expNode>({ expNode(cdOff) })));
+    dOff.timeSplit.push_back(t);
+    std::vector<double> rotAnchorVals = std::vector<double>({ getDeg(subX,subY,0) / pi * 180, (getDeg(subX,subY,t/2) + dOff(t / 2)) / pi * 180, (getDeg(subX,subY,t) + dOff(t)) / pi * 180, angDer(0) / pi * 180, angDer(t / 2) / pi * 180, angDer(t) / pi * 180 });
+    std::vector<double> distAnchorVals = std::vector<double>({ dist(0), dist(t / 2), dist(t), distDer(0), distDer(t / 2), distDer(t) });
+    return morphSpec(minDist, maxDist, crossPoints, rotAnchorVals, distAnchorVals);
+}
+
+
