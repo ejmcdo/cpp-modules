@@ -1579,7 +1579,7 @@ enum transformType{
 };
 
 /*
-* transformType - Represents a type of transformation.
+* transformNames - Names of each type of transform in string format. Used for debug purposes.
 */
 std::vector<std::string> transformNames = std::vector<std::string>({"Translate","Rotate","Scale","Progressive Translate","Progressive Rotate","Progressive Scale"});
 
@@ -1592,10 +1592,10 @@ struct transformNode {
     double val1{};
     expr val2{};
     expr val3{};
-    // If there are two double values, the type must be specifed because it could either mean a TRANSLATE or a SCALE. One double would a rotation around the origin using a single degree value.
+    // If there are two double values, the type must be specifed because it could either mean a TRANSLATE or a SCALE. One double would mean a rotation around the origin using a single degree value.
     // The same logic applies for progressive transformations.
-    transformNode(transformType t, double x, double y) : type(t), val0(x), val1(y) {}
     transformNode() {}
+    transformNode(transformType t, double x, double y) : type(t), val0(x), val1(y) {}
     transformNode(double x) : type(ROTATE), val0(x) {}
     transformNode(transformType t, expr x, expr y) : type(t), val2(x), val3(y) {}
     transformNode(expr x) : type(P_ROTATE), val2(x) {}
@@ -1645,7 +1645,7 @@ struct para {
     std::vector<point> derivPoints;
     std::vector<point> doubleDerivPoints;
 
-    // limits - the minimums and maximums of the curve.
+    // limits - The minimums and maximums of the curve.
     bounds limits;
 
     // length - Approximate length of the curve.
@@ -2674,11 +2674,11 @@ enum fsTypes {
 */
 struct fillSquare {
     point pos; // Position of the square.
-    int s = 0; // Size of the square.
+    double s = 0; // Size of the square.
     std::vector<bool> c; // Represents each corner of the square, set to true if said corner lies within the prism.
     fsTypes t = FS_CHECK;
     fillSquare() {};
-    fillSquare(point p, int si, std::vector<bool> co, fsTypes ty) : pos(p), s(si), c(co), t(ty) {}
+    fillSquare(point p, double si, std::vector<bool> co, fsTypes ty) : pos(p), s(si), c(co), t(ty) {}
     void print(){
         pos.print();
         std::cout << s << " " << int(t) << "\n";
@@ -2839,10 +2839,11 @@ struct prism {
         return final;
     }
 
-    // fill - Fills in a prism using fillSquares.
-    void fill() {
+    // fill - Fills in a prism using fillSquares. Uses powers of two by default, but can also take in a target size.
+    void fill(double s) {
         squares.clear();
-        double startSize = pow(2, floor(log(std::min(limits.maxX - limits.minX, limits.maxY - limits.minY)) / log(2))); // Using the prism bounds, a startSize powrer of 2 is derived.
+        double fa = s/pow(2,floor(log(s)/log(2)));
+        double startSize = pow(2, floor(log(std::min(limits.maxX - limits.minX, limits.maxY - limits.minY) / fa) / log(2))) * fa; // Using the prism bounds, a startSize is derived based of the target size.
         bounds roundBounds = bounds(floor(limits.minX / startSize) * startSize, floor(limits.minY / startSize) * startSize, ceil(limits.maxX / startSize) * startSize, ceil(limits.maxY / startSize) * startSize);
         std::vector<std::vector<bool>> points;
         std::vector<fillSquare> tBlocks;
@@ -2864,6 +2865,11 @@ struct prism {
                 squares.push_back(tBlocks[0]);
             tBlocks.erase(tBlocks.begin(), tBlocks.begin() + 1); // First block in the array is always taken out and continues until its empty.
         }
+    }
+
+    // Default case for fill using a target size of 1.
+    void fill(){
+        fill(1);
     }
 
     // trunc - Takes a set of curves and only returns the fragments that fall within the prism.
@@ -3349,231 +3355,6 @@ std::vector<para> pointSlopeWarp(para bx, para by, std::vector<para> l, point sc
 */
 std::vector<para> circPoints(std::vector<point> pl, double an, prism limits){
     return limits.trunc(circPoints(pl, an, limits.limits));
-}
-
-/*
-* stringFuncs - Represents different types of functions that can be used in string notation. Currently unfinished.
-*/
-enum stringFuncs{
-    NONE_SF,
-    BEZIER, // be
-    BSPLINE, // bs
-    SINUSOID, // si
-    COMPCURVE, // co
-    TRANSFORM, // tr
-    EXTEND, // ex
-    TANGENT, // ta
-    SWARP, // sw
-    DWARP, // dw
-    QWARP, // qw
-    INTERSECTION, // in
-    PRISM, // pr
-    PSWARP, // ps
-    CIRC, // ci
-};
-
-/*
-* snCache - Structure that is used to store the data from a stringNotation parse.
-*/
-struct snCache{
-    std::vector<std::vector<para>> curves;
-    std::vector<prism> prisms;
-    snCache(){}
-    snCache(std::vector<std::vector<para>> c, std::vector<prism> p): curves(c), prisms(p) {}
-};
-
-/*
-* stringNotation - Takes a raw string, parses it, and returns the resulting curves and prisms in the form of a snCache.
-*/
-snCache stringNotation(std::string s){
-    std::string vh="";
-    stringFuncs func=NONE_SF;
-    std::vector<std::vector<para>> finalC;
-    std::vector<prism> finalP;
-    std::vector<std::vector<double>> valStore;
-    int valCount = 0;
-    std::vector<point> valStorePoint;
-    std::vector<para> valStorePara;
-    transformType sampTransform;
-    std::vector<transformNode> valStoreTN;
-    std::vector<intersection> valStoreInter;
-    std::vector<intersection> valStoreInter2;
-    bool read = true;
-    for(int i=0;i<s.size();i++){
-        if(s[i] == '[')
-            read = false;
-        if(read){
-            if(s[i] == '\n')
-                vh = "";
-            else if(s[i] == ',' || s[i] == ';'){
-                valStore[valStore.size()-1].push_back(str2Doub(vh));
-                vh = "";
-            }
-            else if(s[i] == '|'){
-                valStore[valStore.size()-1].push_back(str2Doub(vh));
-                valStore.push_back(std::vector<double>({}));
-                vh = "";
-            }
-            else
-                vh += s[i];
-            if(func == NONE_SF and vh.size() == 2){
-                if(vh == "be")
-                    func = BEZIER;
-                else if(vh == "bs")
-                    func = BSPLINE;
-                else if(vh == "si")
-                    func = SINUSOID;
-                else if(vh == "co")
-                    func = COMPCURVE;
-                else if(vh == "tr")
-                    func = TRANSFORM;
-                else if(vh == "ex")
-                    func = EXTEND;
-                else if(vh == "ta")
-                    func = TANGENT;
-                else if(vh == "sw")
-                    func = SWARP;
-                else if(vh == "dw")
-                    func = DWARP;
-                else if(vh == "qw")
-                    func = QWARP;
-                else if(vh == "in")
-                    func = INTERSECTION;
-                else if(vh == "pr")
-                    func = PRISM;
-                else if(vh == "ps")
-                    func = PSWARP;
-                else if(vh == "ci")
-                    func = CIRC;
-                valStore.clear();
-                valStore.push_back(std::vector<double>({}));
-                vh = "";
-                }
-            if(s[i] == ';'){
-                if(func == BEZIER or func == BSPLINE or func == CIRC){
-                    for(int j=0;j<valStore[0].size();j+=2)
-                        valStorePoint.push_back(point(valStore[0][j],valStore[0][j+1]));
-                }
-                if(func == TRANSFORM or func == PRISM){
-                    for(int j=0;j<valStore[0].size();j+=2)
-                        valStorePara.push_back(finalC[valStore[0][j]][valStore[0][j+1]]);
-                }
-                if(func == SWARP or func == DWARP or func == QWARP or func == PSWARP){
-                    for(int j=0;j<valStore[1].size();j+=2)
-                        valStorePara.push_back(finalC[valStore[1][j]][valStore[1][j+1]]);
-                }
-                switch(func){
-                case BEZIER:
-                    finalC.push_back(std::vector<para>({bez(valStorePoint)}));
-                    valStorePoint.clear();
-                    break;
-                case BSPLINE:
-                    finalC.push_back(std::vector<para>({bSpline(valStorePoint,valStore[1][0],valStore[1][1])}));
-                    valStorePoint.clear();
-                    break;
-                case SINUSOID:
-                    finalC.push_back(std::vector<para>({sinusoid(point(valStore[0][0],valStore[0][1]),valStore[0][2],valStore[0][3],valStore[0][4],valStore[0][5])}));
-                    break;
-                case COMPCURVE:
-                    finalC.push_back(std::vector<para>({compCurve(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]])}));
-                    break;
-                case TRANSFORM:
-                    valCount = 0;
-                    for(int j=0;j<valStore[1].size();j++){
-                        if(valStore[1][j] == 0 || valStore[1][j] == 2){
-                            valStoreTN.push_back(transformNode(transformType(valStore[1][j]),valStore[2][valCount],valStore[2][valCount+1]));
-                            valCount += 2;
-                        }
-                        else if (valStore[1][j] == 1){
-                            valStoreTN.push_back(transformNode(valStore[2][valCount]));
-                            valCount++;
-                        }
-                        else if (valStore[1][j] == 3 || valStore[1][j] == 5){
-                            valStoreTN.push_back(transformNode(transformType(valStore[1][j]),finalC[valStore[2][valCount]][valStore[2][valCount+1]].x,finalC[valStore[2][valCount+2]][valStore[2][valCount+3]].y));
-                            valCount += 4;
-                        }
-                        else if (valStore[1][j] == 4){
-                            if(valStore[2][valCount+2])
-                                valStoreTN.push_back(transformNode(finalC[valStore[2][valCount]][valStore[2][valCount+1]].y));
-                            else
-                                valStoreTN.push_back(transformNode(finalC[valStore[2][valCount]][valStore[2][valCount+1]].x));
-                            valCount += 3;
-                        }
-                    }
-                    finalC.push_back(transform(valStorePara,valStoreTN));
-                    valStorePara.clear();
-                    valStoreTN.clear();
-                    break;
-                case EXTEND:
-                    if(valStore[0].size() == 3)
-                        finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2])}));
-                    if(valStore[0].size() == 4)
-                        finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2],valStore[0][3])}));
-                    if(valStore[0].size() == 7){
-                        if(valStore[0][4])
-                            finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]].y,quickTransform(valStore[0][5],valStore[0][6]))}));
-                        else
-                            finalC.push_back(std::vector<para>({extend(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]].x,quickTransform(valStore[0][5],valStore[0][6]))}));
-                    }
-                    break;
-                case TANGENT:
-                    finalC.push_back(std::vector<para>({tangent(finalC[valStore[0][0]][valStore[0][1]],valStore[0][2],finalC[valStore[0][3]][valStore[0][4]],valStore[0][5])}));
-                    break;
-                case SWARP:
-                    finalC.push_back(std::vector<para>({singleWarp(finalC[valStore[0][0]][valStore[0][1]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
-                    valStorePara.clear();
-                    break;
-                case DWARP:
-                    finalC.push_back(std::vector<para>({doubleWarp(valStore[0][2] ? finalC[valStore[0][0]][valStore[0][1]].slice(1,0) : finalC[valStore[0][0]][valStore[0][1]],valStore[0][5] ? finalC[valStore[0][3]][valStore[0][4]].slice(1,0) : finalC[valStore[0][3]][valStore[0][4]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
-                    valStorePara.clear();
-                    break;
-                case QWARP:
-                    finalC.push_back(std::vector<para>({quadWarp(valStore[0][2] ? finalC[valStore[0][0]][valStore[0][1]].slice(1,0) : finalC[valStore[0][0]][valStore[0][1]],valStore[0][5] ? finalC[valStore[0][3]][valStore[0][4]].slice(1,0) : finalC[valStore[0][3]][valStore[0][4]],valStore[0][8] ? finalC[valStore[0][6]][valStore[0][7]].slice(1,0) : finalC[valStore[0][6]][valStore[0][7]],valStore[0][11] ? finalC[valStore[0][9]][valStore[0][10]].slice(1,0) : finalC[valStore[0][9]][valStore[0][10]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]))}));
-                    valStorePara.clear();
-                    break;
-                case INTERSECTION:
-                    if(valStore[0].size() == 6){
-                        valStoreInter = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]]);
-                        if(valStore[0][5] == 1)
-                            finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(valStoreInter[valStore[0][4]].prog1,1)}));
-                        else
-                            finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(0,valStoreInter[valStore[0][4]].prog1)}));
-                    }
-                    if(valStore[0].size() == 8){
-                        valStoreInter = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]]);
-                        valStoreInter2 = findInters(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][5]][valStore[0][6]]);
-                        finalC.push_back(std::vector<para>({finalC[valStore[0][0]][valStore[0][1]].slice(valStoreInter[valStore[0][4]].prog1,valStoreInter2[valStore[0][7]].prog1)}));
-                        valStoreInter2.clear();
-                    }
-                    valStoreInter.clear();
-                    break;
-                case PRISM:
-                    finalP.push_back(prism(valStorePara));
-                    break;
-                case PSWARP:
-                    if(valStore[3].size() == 4)
-                        finalC.push_back(pointSlopeWarp(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]),bounds(valStore[3][0],valStore[3][1],valStore[3][2],valStore[3][3])));
-                    else
-                        finalC.push_back(pointSlopeWarp(finalC[valStore[0][0]][valStore[0][1]],finalC[valStore[0][2]][valStore[0][3]],valStorePara,point(valStore[2][0],valStore[2][1]),point(valStore[2][2],valStore[2][3]),finalP[valStore[3][0]]));
-                    break;
-                case CIRC:
-                    if(valStore[2].size() == 4)
-                        finalC.push_back(circPoints(valStorePoint,valStore[1][0],bounds(valStore[2][0],valStore[2][1],valStore[2][2],valStore[2][3])));
-                    else
-                        finalC.push_back(circPoints(valStorePoint,valStore[1][0],finalP[valStore[2][0]]));
-                    break;
-                }
-                if(func == BEZIER or func == BSPLINE or func == CIRC)
-                    valStorePoint.clear();
-                if(func == TRANSFORM or func == SWARP or func == DWARP or func == QWARP or func == PRISM or func == PSWARP)
-                    valStorePara.clear();
-                func = NONE_SF;
-            }
-        }
-        if(s[i] == ']')
-            read = true;
-    }
-    return snCache(finalC,finalP);
 }
 
 /*

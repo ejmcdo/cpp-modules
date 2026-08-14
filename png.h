@@ -10,6 +10,12 @@
 #include <zlib-handle.h>
 #include <color-handle.h>
 
+void crash(){
+    std::vector<int> brother = std::vector<int>({0});
+    std::cout << "HAHA CRASHED LMAO\n";
+    std::cout << brother[100];
+}
+
 /*
 * paeth - Predictor model used in the parsing process.
 */
@@ -43,13 +49,13 @@ enum filter{
 std::vector<std::vector<pixel>> matrix(std::string fn){
     std::string sb = fileCont(fn);
     int count = 8;
-    std::vector<std::vector<int>> blocks;
+    std::vector<std::vector<unsigned char>> blocks;
     std::vector<std::string> blockNames;
     std::vector<int> datBlockIndices;
     while(count < sb.size()){ // Block parser. The only blocks that really matter are the IDAT blocks, where the pixel data is stored.
         int blockLen = 0;
         for (int i=0;i<4;i++)
-            blockLen+=sb[count+i]*pow(256,3-i);
+            blockLen+=static_cast<unsigned char>(sb[count+i])*pow(256,3-i);
         std::string blockName = "";
         for (int i=0;i<4;i++)
             blockName += sb[count+i+4];
@@ -57,14 +63,14 @@ std::vector<std::vector<pixel>> matrix(std::string fn){
             datBlockIndices.push_back(blockNames.size());
         blockNames.push_back(blockName);
         count += 8;
-        std::vector<int> blockData;
+        std::vector<unsigned char> blockData;
         for(int i=0;i<blockLen;i++)
             blockData.push_back(sb[count+i]);
         count += blockLen+4;
         blocks.push_back(blockData);
     } // The first block is always the header block, which is where the width and height of the image are stored.
-    int width = 0;
-    int height = 0;
+    unsigned int width = 0;
+    unsigned int height = 0;
     for(int i=0;i<4;i++){
         width += blocks[0][i]*pow(256,3-i);
         height += blocks[0][i+4]*pow(256,3-i);
@@ -115,6 +121,7 @@ std::vector<std::vector<pixel>> matrix(std::string fn){
                     if(i > 0)
                         sp2 = pixelMat[i-1][j][k];
                     pixelMat[i][j][k] = (pixelMat[i][j][k]+int((sp1+sp2)/2))%256;
+                    break;
                 case PAETH:
                     sp1 = 0;
                     if(j > 0)
@@ -126,6 +133,7 @@ std::vector<std::vector<pixel>> matrix(std::string fn){
                     if(i > 0 && j > 0)
                         sp3 = pixelMat[i-1][j-1][k];
                     pixelMat[i][j][k] = (pixelMat[i][j][k]+paeth(sp1,sp2,sp3))%256;
+                    break;
                 }
             }
             finalPixels[finalPixels.size()-1].push_back(pixel(pixelMat[i][j]));

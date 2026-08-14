@@ -32,6 +32,9 @@ struct fullColor{
         }
     }
     void checkRGB(){ // In case there are any changes to h, s, or v, values r, g, and b, are recalculated to reflect the changes.
+        h += 180; // Constraint to keep the hue value between -180 and 180.
+        h = fmod(h,360)+360*(h<0);
+        h -= 180;
         std::vector<double>final=std::vector<double>({0,0,0});
         if(h>=0&&h<60){
             final[0]=1;
@@ -90,6 +93,16 @@ struct fullColor{
         std::cout << r << " " << g << " " << b << "\n" << h << " " << s << " " << v;
     }
 };
+
+/*
+* gravRGB and gravHSV - Gravitation functions. Uses two reference colors and finds the color in between using factor r.
+*/
+fullColor gravRGB(fullColor c1, fullColor c2, double r){
+    return fullColor(c1.r+(c2.r-c1.r)*r,c1.g+(c2.g-c1.g)*r,c1.b+(c2.b-c1.b)*r,false);
+}
+fullColor gravHSV(fullColor c1, fullColor c2, double r){
+    return fullColor(c1.h+(c2.h-c1.h)*r,c1.s+(c2.s-c1.s)*r,c1.v+(c2.v-c1.v)*r,true);
+}
 
 /*
 * pixel - Represents a single pixel in an image.
